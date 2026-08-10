@@ -327,21 +327,21 @@ function MediumWidget({ snapshot, logo, car, privacy }: {
 
 function LargeStat({ icon, value, label }: { icon: string; value: string; label: string }) {
   return (
-    <VStack alignment="leading" spacing={2} frame={{ maxWidth: Infinity, alignment: "leading" }}>
-      <HStack spacing={4}>
-        <Image systemName={icon} font={10} foregroundStyle={ACCENT} />
-        <Text font={11} fontWeight="semibold" lineLimit={1} minScaleFactor={0.8}>{value}</Text>
+    <VStack alignment="leading" spacing={1} frame={{ maxWidth: Infinity, alignment: "leading" }}>
+      <HStack spacing={3}>
+        <Image systemName={icon} font={9} foregroundStyle={ACCENT} />
+        <Text font={10} fontWeight="semibold" lineLimit={1} minScaleFactor={0.7}>{value}</Text>
       </HStack>
-      <Text font={8} foregroundStyle="secondaryLabel">{label}</Text>
+      <Text font={7} foregroundStyle="secondaryLabel">{label}</Text>
     </VStack>
   )
 }
 
 function TireCell({ label, tire }: { label: string; tire?: { pressureBar?: number; status?: string } }) {
   return (
-    <VStack alignment="leading" spacing={2} frame={{ maxWidth: Infinity, alignment: "leading" }}>
-      <Text font={8} foregroundStyle="secondaryLabel">{label}</Text>
-      <Text font={12} fontWeight="semibold" lineLimit={1} minScaleFactor={0.8} foregroundStyle={tirePairColor(tire?.status)}>
+    <VStack alignment="leading" spacing={1} frame={{ maxWidth: Infinity, alignment: "leading" }}>
+      <Text font={7} foregroundStyle="secondaryLabel">{label}</Text>
+      <Text font={11} fontWeight="semibold" lineLimit={1} minScaleFactor={0.8} foregroundStyle={tirePairColor(tire?.status)}>
         {tire?.pressureBar != null ? tire.pressureBar.toFixed(1) : "—"}
       </Text>
     </VStack>
@@ -370,46 +370,46 @@ function LargeWidget({ snapshot, logo, mapImage, privacy }: {
   return (
     <VStack
       alignment="leading"
-      spacing={8}
-      padding={14}
+      spacing={6}
+      padding={12}
       frame={{ maxWidth: Infinity, maxHeight: Infinity, alignment: "topLeading" }}
       widgetURL={deepLink("overview")}
       widgetBackground={CARD_BG}
     >
       {/* 上半部分：信息 */}
-      <VStack alignment="leading" spacing={8} frame={{ maxWidth: Infinity, alignment: "topLeading" }}>
+      <VStack alignment="leading" spacing={6} frame={{ maxWidth: Infinity, alignment: "topLeading" }}>
         <HStack spacing={6}>
           <Text font="title3" fontWeight="bold" lineLimit={1} minScaleFactor={0.7}>
             {snapshot.identity.displayName}
           </Text>
           <Spacer minLength={0} />
           {snapshot.identity.plateMasked ? (
-            <Text font={10} foregroundStyle="secondaryLabel">{snapshot.identity.plateMasked}</Text>
+            <Text font={9} foregroundStyle="secondaryLabel">{snapshot.identity.plateMasked}</Text>
           ) : null}
           <LockBadge snapshot={snapshot} />
-          <LogoView logo={logo} size={22} />
+          <LogoView logo={logo} size={20} />
         </HStack>
 
         {/* 数据卡：左侧胎压 2×2（按车轮逻辑位置），右侧油量/能耗/续航/总里程；无胎压数据时仅显示右侧 */}
-        <HStack spacing={10} padding={10} background={SUB_BG} clipShape={{ type: "rect", cornerRadius: 13 }}>
+        <HStack spacing={8} padding={{ horizontal: 8, vertical: 7 }} background={SUB_BG} clipShape={{ type: "rect", cornerRadius: 12 }}>
           {snapshot.tires ? (
-            <VStack alignment="leading" spacing={6} frame={{ width: 118, alignment: "leading" }}>
-              <HStack spacing={12}>
+            <VStack alignment="leading" spacing={5} frame={{ width: 108, alignment: "leading" }}>
+              <HStack spacing={10}>
                 <TireCell label="左前" tire={snapshot.tires?.frontLeft} />
                 <TireCell label="右前" tire={snapshot.tires?.frontRight} />
               </HStack>
-              <HStack spacing={12}>
+              <HStack spacing={10}>
                 <TireCell label="左后" tire={snapshot.tires?.rearLeft} />
                 <TireCell label="右后" tire={snapshot.tires?.rearRight} />
               </HStack>
             </VStack>
           ) : null}
-          <VStack alignment="leading" spacing={6} frame={{ maxWidth: Infinity, alignment: "leading" }}>
-            <HStack spacing={12}>
+          <VStack alignment="leading" spacing={5} frame={{ maxWidth: Infinity, alignment: "leading" }}>
+            <HStack spacing={10}>
               <LargeStat icon="fuelpump.fill" value={fuelLevelText(snapshot)} label="油量" />
               <LargeStat icon="flame.fill" value={consumptionText(snapshot)} label="能耗" />
             </HStack>
-            <HStack spacing={12}>
+            <HStack spacing={10}>
               <LargeStat icon="map" value={snapshot.energy.rangeKm != null ? `${snapshot.energy.rangeKm}㎞` : "—㎞"} label="续航" />
               <LargeStat icon="gauge.with.dots.needle.67percent" value={snapshot.mileageKm != null ? `${snapshot.mileageKm.toLocaleString()}㎞` : "—"} label="总里程" />
             </HStack>
@@ -417,14 +417,14 @@ function LargeWidget({ snapshot, logo, mapImage, privacy }: {
         </HStack>
 
         {/* 地址 + 数据状态 */}
-        <HStack spacing={4}>
-          <Image systemName="location.fill" font={10} foregroundStyle="secondaryLabel" />
-          <Text font={10} foregroundStyle="secondaryLabel" lineLimit={1}>
+        <HStack spacing={3}>
+          <Image systemName="location.fill" font={9} foregroundStyle="secondaryLabel" />
+          <Text font={9} foregroundStyle="secondaryLabel" lineLimit={1}>
             {privacy ? "位置已隐藏" : (snapshot.location?.address ?? "位置不可用")}
           </Text>
           <Spacer minLength={0} />
-          <Image systemName="circle.fill" font={6} foregroundStyle={freshnessColor(freshness) as any} />
-          <Text font={9} fontWeight="medium" foregroundStyle={freshnessColor(freshness) as any}>
+          <Image systemName="circle.fill" font={5} foregroundStyle={freshnessColor(freshness) as any} />
+          <Text font={8} fontWeight="medium" foregroundStyle={freshnessColor(freshness) as any}>
             {freshnessLabel(freshness)}
           </Text>
         </HStack>
