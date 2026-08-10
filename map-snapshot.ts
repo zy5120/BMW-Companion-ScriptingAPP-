@@ -7,10 +7,11 @@ export function mapSnapshotPath(): string {
 
 // 用 MapKit 离屏渲染一张 Apple 原生地图（带车辆标注），保存为 PNG。
 // 刷新车况后自动调用，无需任何界面操作；大号组件读取该图片显示。
+// 尺寸取大（1280×720），组件内按填充+裁剪显示，高分辨率设备上也不会显小。
 export async function refreshMapSnapshot(
   latitude: number,
   longitude: number,
-  size = { width: 640, height: 340 },
+  size = { width: 1280, height: 720 },
 ): Promise<boolean> {
   try {
     const snap = await MapSnapshotter.take({
