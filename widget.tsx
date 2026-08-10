@@ -14,7 +14,7 @@ import {
 } from "scripting"
 import type { VehicleSnapshot } from "./domain"
 import { renewSession } from "./bmw-client"
-import { BMW_HEADERS, BMW_HOST } from "./compat-config"
+import { BMW_HEADERS, BMW_HOST, brandUserAgent } from "./compat-config"
 import { formatSyncTime } from "./formatters"
 import { loadSession, saveSession } from "./session-vault"
 import {
@@ -83,9 +83,10 @@ async function fetchOfficialCarImage(snapshot: VehicleSnapshot): Promise<UIImage
     }
     const url =
       `${BMW_HOST}/eadrax-ics/v3/presentation/vehicles/${encodeURIComponent(snapshot.vin)}/images?carView=VehicleStatus`
+    const brand = snapshot.identity.brand?.toLowerCase() === "mini" ? "MINI" : "BMW"
     const response = await fetch(url, {
       method: "GET",
-      headers: { ...BMW_HEADERS, authorization: `Bearer ${usable.accessToken}` },
+      headers: { ...BMW_HEADERS, "x-user-agent": brandUserAgent(brand), authorization: `Bearer ${usable.accessToken}` },
       timeout: 12,
       handleRedirect: async request => (request.url.startsWith(BMW_HOST) ? request : null),
       debugLabel: "official car image",
