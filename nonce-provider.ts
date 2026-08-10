@@ -5,6 +5,7 @@ import {
   COMPAT_NONCE_PATH,
 } from "./compat-config"
 import { createCompatProviderSignature } from "./compat-signature"
+import { scriptKeyNamespace } from "./storage"
 
 export type NoncePurpose = "login" | "refresh"
 
@@ -17,7 +18,11 @@ export interface NonceConsentRecord {
   dataClasses: ["mobile", "gcid", "client-version", "ip-and-request-metadata"]
 }
 
-export const NONCE_CONSENT_KEY = "bmw.companion.v2.nonceConsent.meidaisan-v5-compat"
+// 组件拉取官方车辆实拍图时也需要 nonce 同意记录（独立扩展进程读不到插件私有存储），故保留共享；
+// key 带脚本命名空间，避免多脚本互相覆盖。
+const NS = scriptKeyNamespace()
+export const NONCE_CONSENT_KEY = `bmw.companion.v2.${NS}.nonceConsent.meidaisan-v5-compat`
+const SHARED = { shared: true }
 
 export const nonceDisclosure = {
   providerId: "meidaisan-v5-compat" as const,
@@ -29,7 +34,7 @@ export const nonceDisclosure = {
 }
 
 export function loadNonceConsent(): NonceConsentRecord | null {
-  const value = Storage.get<NonceConsentRecord>(NONCE_CONSENT_KEY)
+  const value = Storage.get<NonceConsentRecord>(NONCE_CONSENT_KEY, SHARED)
   if (!value ||
       value.schemaVersion !== 1 ||
       value.providerId !== nonceDisclosure.providerId ||
@@ -47,12 +52,12 @@ export function grantNonceConsent(): NonceConsentRecord {
     acceptedHost: nonceDisclosure.host,
     dataClasses: ["mobile", "gcid", "client-version", "ip-and-request-metadata"],
   }
-  Storage.set(NONCE_CONSENT_KEY, record)
+  Storage.set(NONCE_CONSENT_KEY, record, SHARED)
   return record
 }
 
 export function revokeNonceConsent(): void {
-  Storage.remove(NONCE_CONSENT_KEY)
+  Storage.remove(NONCE_CONSENT_KEY, SHARED)
 }
 
 export async function requestCompatNonce(
