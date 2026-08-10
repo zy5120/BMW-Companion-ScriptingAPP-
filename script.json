@@ -1,33 +1,30 @@
 {
-  "permissions" : null,
-  "color" : "#166DFF",
-  "iconImage" : null,
-  "intentInputTypes" : [
+  "permissions": null,
+  "color": "#166DFF",
+  "iconImage": null,
+  "intentInputTypes": [
     "texts"
   ],
-  "runInApp" : false,
-  "name" : "BMW Companion",
-  "contributors" : [
-
-  ],
-  "version" : "0.1.2",
-  "remoteResource" : {
-    "url" : "https:\/\/github.com\/zy5120\/BMW-Companion-ScriptingAPP-",
-    "autoUpdateInterval" : 600,
-    "hash" : "5faedaa2dc95da14a94f17ed7c9d42c8"
+  "runInApp": false,
+  "name": "BMW Companion",
+  "contributors": [],
+  "version": "0.1.2",
+  "remoteResource": {
+    "url": "https://github.com/zy5120/BMW-Companion-ScriptingAPP-",
+    "autoUpdateInterval": 600
   },
-  "localizedDescriptions" : {
-    "zh-Hans" : "隐私披露下的 BMW 只读车况临时兼容版"
+  "localizedDescriptions": {
+    "zh-Hans": "隐私披露下的 BMW 只读车况临时兼容版"
   },
-  "entry" : "index.tsx",
-  "author" : {
-    "email" : null,
-    "name" : "厦门硬骨头",
-    "homepage" : null
+  "entry": "index.tsx",
+  "author": {
+    "email": null,
+    "name": "厦门硬骨头",
+    "homepage": null
   },
-  "localizedNames" : {
-    "zh-Hans" : "BMW Companion"
+  "localizedNames": {
+    "zh-Hans": "BMW Companion"
   },
-  "icon" : "car.side.fill",
-  "description" : "A privacy-first native BMW vehicle status companion for Scripting."
+  "icon": "car.side.fill",
+  "description": "A privacy-first native BMW vehicle status companion for Scripting."
 }
