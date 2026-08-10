@@ -23,6 +23,7 @@ import {
   Toggle,
   VStack,
   Widget,
+  useEffect,
   useMemo,
   useObservable,
   useState,
@@ -62,6 +63,10 @@ const CARD = "secondarySystemBackground"
 function vehicleBrand(snapshot: VehicleSnapshot): string {
   return snapshot.identity.brand?.toLowerCase() === "mini" ? "MINI" : "BMW"
 }
+
+// 品牌 logo 图源（车况页车名右侧）
+const BMW_LOGO_URL = "https://m.qqtlr.com/logo.png"
+const MINI_LOGO_URL = "https://upload.wikimedia.org/wikipedia/commons/thumb/e/e9/MINI_logo.svg/330px-MINI_logo.svg.png"
 
 declare const Dialog: any
 declare const Safari: any
@@ -197,6 +202,17 @@ function EnergyHero({ snapshot }: { snapshot: VehicleSnapshot }) {
 
 function VehicleHeader({ snapshot }: { snapshot: VehicleSnapshot }) {
   const freshness = getFreshness(snapshot)
+  const brand = snapshot.identity.brand?.toLowerCase() === "mini" ? "MINI" : "BMW"
+  const [brandLogo, setBrandLogo] = useState<UIImage | null>(null)
+  useEffect(() => {
+    let cancelled = false
+    setBrandLogo(null)
+    const url = brand === "MINI" ? MINI_LOGO_URL : BMW_LOGO_URL
+    UIImage.fromURL(url)
+      .then(img => { if (!cancelled && img) setBrandLogo(img) })
+      .catch(() => {})
+    return () => { cancelled = true }
+  }, [brand])
   return (
     <VStack alignment="leading" spacing={14}>
       <HStack alignment="top">
@@ -209,12 +225,16 @@ function VehicleHeader({ snapshot }: { snapshot: VehicleSnapshot }) {
           </Text>
         </VStack>
         <Spacer />
-        <Image
-          systemName="car.side.fill"
-          font={34}
-          foregroundStyle={ACCENT}
-          symbolRenderingMode="hierarchical"
-        />
+        {brandLogo ? (
+          <Image image={brandLogo} resizable scaleToFit frame={{ width: 40, height: 40 }} clipShape={{ type: "capsule", style: "continuous" }} />
+        ) : (
+          <Image
+            systemName="car.side.fill"
+            font={34}
+            foregroundStyle={ACCENT}
+            symbolRenderingMode="hierarchical"
+          />
+        )}
       </HStack>
       <HStack spacing={8}>
         <StatusPill
@@ -511,7 +531,7 @@ function SettingsPage() {
         <HStack>
           <Text>版本</Text>
           <Spacer />
-          <Text foregroundStyle="secondaryLabel">0.1.2</Text>
+          <Text foregroundStyle="secondaryLabel">0.1.4</Text>
         </HStack>
         <HStack>
           <Text>作者</Text>
