@@ -370,51 +370,67 @@ function LargeWidget({ snapshot, logo, mapImage, privacy }: {
   return (
     <VStack
       alignment="leading"
-      spacing={9}
+      spacing={8}
       padding={14}
       frame={{ maxWidth: Infinity, maxHeight: Infinity, alignment: "topLeading" }}
       widgetURL={deepLink("overview")}
       widgetBackground={CARD_BG}
     >
-      <HStack spacing={6}>
-        <Text font="title3" fontWeight="bold" lineLimit={1} minScaleFactor={0.7}>
-          {snapshot.identity.displayName}
-        </Text>
-        <Spacer minLength={0} />
-        {snapshot.identity.plateMasked ? (
-          <Text font={10} foregroundStyle="secondaryLabel">{snapshot.identity.plateMasked}</Text>
-        ) : null}
-        <LockBadge snapshot={snapshot} />
-        <LogoView logo={logo} size={22} />
-      </HStack>
+      {/* 上半部分：信息 */}
+      <VStack alignment="leading" spacing={8} frame={{ maxWidth: Infinity, alignment: "topLeading" }}>
+        <HStack spacing={6}>
+          <Text font="title3" fontWeight="bold" lineLimit={1} minScaleFactor={0.7}>
+            {snapshot.identity.displayName}
+          </Text>
+          <Spacer minLength={0} />
+          {snapshot.identity.plateMasked ? (
+            <Text font={10} foregroundStyle="secondaryLabel">{snapshot.identity.plateMasked}</Text>
+          ) : null}
+          <LockBadge snapshot={snapshot} />
+          <LogoView logo={logo} size={22} />
+        </HStack>
 
-      {/* 数据卡：左侧胎压 2×2（按车轮逻辑位置），右侧油量/能耗/续航/总里程；无胎压数据时仅显示右侧 */}
-      <HStack spacing={10} padding={10} background={SUB_BG} clipShape={{ type: "rect", cornerRadius: 13 }}>
-        {snapshot.tires ? (
-          <VStack alignment="leading" spacing={6} frame={{ width: 118, alignment: "leading" }}>
+        {/* 数据卡：左侧胎压 2×2（按车轮逻辑位置），右侧油量/能耗/续航/总里程；无胎压数据时仅显示右侧 */}
+        <HStack spacing={10} padding={10} background={SUB_BG} clipShape={{ type: "rect", cornerRadius: 13 }}>
+          {snapshot.tires ? (
+            <VStack alignment="leading" spacing={6} frame={{ width: 118, alignment: "leading" }}>
+              <HStack spacing={12}>
+                <TireCell label="左前" tire={snapshot.tires?.frontLeft} />
+                <TireCell label="右前" tire={snapshot.tires?.frontRight} />
+              </HStack>
+              <HStack spacing={12}>
+                <TireCell label="左后" tire={snapshot.tires?.rearLeft} />
+                <TireCell label="右后" tire={snapshot.tires?.rearRight} />
+              </HStack>
+            </VStack>
+          ) : null}
+          <VStack alignment="leading" spacing={6} frame={{ maxWidth: Infinity, alignment: "leading" }}>
             <HStack spacing={12}>
-              <TireCell label="左前" tire={snapshot.tires?.frontLeft} />
-              <TireCell label="右前" tire={snapshot.tires?.frontRight} />
+              <LargeStat icon="fuelpump.fill" value={fuelLevelText(snapshot)} label="油量" />
+              <LargeStat icon="flame.fill" value={consumptionText(snapshot)} label="能耗" />
             </HStack>
             <HStack spacing={12}>
-              <TireCell label="左后" tire={snapshot.tires?.rearLeft} />
-              <TireCell label="右后" tire={snapshot.tires?.rearRight} />
+              <LargeStat icon="map" value={snapshot.energy.rangeKm != null ? `${snapshot.energy.rangeKm}㎞` : "—㎞"} label="续航" />
+              <LargeStat icon="gauge.with.dots.needle.67percent" value={snapshot.mileageKm != null ? `${snapshot.mileageKm.toLocaleString()}㎞` : "—"} label="总里程" />
             </HStack>
           </VStack>
-        ) : null}
-        <VStack alignment="leading" spacing={6} frame={{ maxWidth: Infinity, alignment: "leading" }}>
-          <HStack spacing={12}>
-            <LargeStat icon="fuelpump.fill" value={fuelLevelText(snapshot)} label="油量" />
-            <LargeStat icon="flame.fill" value={consumptionText(snapshot)} label="能耗" />
-          </HStack>
-          <HStack spacing={12}>
-            <LargeStat icon="map" value={snapshot.energy.rangeKm != null ? `${snapshot.energy.rangeKm}㎞` : "—㎞"} label="续航" />
-            <LargeStat icon="gauge.with.dots.needle.67percent" value={snapshot.mileageKm != null ? `${snapshot.mileageKm.toLocaleString()}㎞` : "—"} label="总里程" />
-          </HStack>
-        </VStack>
-      </HStack>
+        </HStack>
 
-      {/* 地图：胎压卡片下方，占据剩余空间 */}
+        {/* 地址 + 数据状态 */}
+        <HStack spacing={4}>
+          <Image systemName="location.fill" font={10} foregroundStyle="secondaryLabel" />
+          <Text font={10} foregroundStyle="secondaryLabel" lineLimit={1}>
+            {privacy ? "位置已隐藏" : (snapshot.location?.address ?? "位置不可用")}
+          </Text>
+          <Spacer minLength={0} />
+          <Image systemName="circle.fill" font={6} foregroundStyle={freshnessColor(freshness) as any} />
+          <Text font={9} fontWeight="medium" foregroundStyle={freshnessColor(freshness) as any}>
+            {freshnessLabel(freshness)}
+          </Text>
+        </HStack>
+      </VStack>
+
+      {/* 下半部分：地图 */}
       <Spacer minLength={0} />
       {!privacy && mapImage ? (
         <Link url={deepLink("location")}>
@@ -441,19 +457,6 @@ function LargeWidget({ snapshot, logo, mapImage, privacy }: {
           </VStack>
         </Link>
       )}
-
-      {/* 底部：地址 + 数据最新状态 */}
-      <HStack spacing={4} padding={{ top: 2 }}>
-        <Image systemName="location.fill" font={10} foregroundStyle="secondaryLabel" />
-        <Text font={10} foregroundStyle="secondaryLabel" lineLimit={1}>
-          {privacy ? "位置已隐藏" : (snapshot.location?.address ?? "位置不可用")}
-        </Text>
-        <Spacer minLength={0} />
-        <Image systemName="circle.fill" font={6} foregroundStyle={freshnessColor(freshness) as any} />
-        <Text font={9} fontWeight="medium" foregroundStyle={freshnessColor(freshness) as any}>
-          {freshnessLabel(freshness)}
-        </Text>
-      </HStack>
     </VStack>
   )
 }
