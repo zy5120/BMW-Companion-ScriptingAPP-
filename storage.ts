@@ -1,12 +1,27 @@
+import { Script } from "scripting"
 import type { CompanionSettings, Freshness, VehicleSnapshot, WidgetParameter } from "./domain"
 import { makeDemoSnapshot } from "./fixtures"
 
-const SNAPSHOT_KEY = "bmw.companion.v2.snapshot.demo-bmw-i4"
-const NETWORK_SNAPSHOT_KEY = "bmw.companion.v2.snapshot.connected"
-const WIDGET_SNAPSHOT_KEY = "bmw.companion.v2.snapshot.widget-projection"
-const RUNTIME_MODE_KEY = "bmw.companion.v2.runtimeMode"
-const SETTINGS_KEY = "bmw.companion.v2.settings"
-const WIDGET_RELOAD_KEY = "bmw.companion.v2.widget.lastReloadAt"
+// 当前脚本名（App 与桌面组件返回一致）→ 生成共享 key 的唯一前缀。
+// 用户可能在同一设备添加多个脚本（每辆一台车），每个脚本必须使用自己的
+// 共享 key，否则第二个脚本会覆盖第一个脚本的组件数据。
+export function scriptKeyNamespace(): string {
+  const name = typeof Script !== "undefined" && Script.name ? Script.name : "bmw-companion"
+  const safe = name.trim().toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/^-+|-+$/g, "")
+  return safe || "bmw-companion"
+}
+
+const NS = scriptKeyNamespace()
+const SNAPSHOT_KEY = `bmw.companion.v2.${NS}.snapshot.demo-bmw-i4`
+const NETWORK_SNAPSHOT_KEY = `bmw.companion.v2.${NS}.snapshot.connected`
+const WIDGET_SNAPSHOT_KEY = `bmw.companion.v2.${NS}.snapshot.widget-projection`
+const RUNTIME_MODE_KEY = `bmw.companion.v2.${NS}.runtimeMode`
+const SETTINGS_KEY = `bmw.companion.v2.${NS}.settings`
+const WIDGET_RELOAD_KEY = `bmw.companion.v2.${NS}.widget.lastReloadAt`
+
+// 桌面组件是独立扩展进程，读不到主 App 的插件私有存储；
+// 以下 key 是组件正常工作必需的，保留在跨环境共享域（不含敏感信息）。
+const SHARED = { shared: true }
 
 export const defaultSettings: CompanionSettings = {
   schemaVersion: 1,
@@ -18,9 +33,9 @@ export const defaultSettings: CompanionSettings = {
 }
 
 export function loadSettings(): CompanionSettings {
-  const value = Storage.get<CompanionSettings>(SETTINGS_KEY)
+  const value = Storage.get<CompanionSettings>(SETTINGS_KEY, SHARED)
   if (!value || value.schemaVersion !== 1) {
-    Storage.set(SETTINGS_KEY, defaultSettings)
+    Storage.set(SETTINGS_KEY, defaultSettings, SHARED)
     return defaultSettings
   }
   return { ...defaultSettings, ...value }
@@ -28,18 +43,18 @@ export function loadSettings(): CompanionSettings {
 
 export function saveSettings(settings: CompanionSettings): CompanionSettings {
   const next = { ...defaultSettings, ...settings, schemaVersion: 1 as const }
-  Storage.set(SETTINGS_KEY, next)
+  Storage.set(SETTINGS_KEY, next, SHARED)
   return next
 }
 
 export type RuntimeMode = "demo" | "connected"
 
 export function loadRuntimeMode(): RuntimeMode {
-  return Storage.get<RuntimeMode>(RUNTIME_MODE_KEY) === "connected" ? "connected" : "demo"
+  return Storage.get<RuntimeMode>(RUNTIME_MODE_KEY, SHARED) === "connected" ? "connected" : "demo"
 }
 
 export function setRuntimeMode(mode: RuntimeMode): void {
-  Storage.set(RUNTIME_MODE_KEY, mode)
+  Storage.set(RUNTIME_MODE_KEY, mode, SHARED)
 }
 
 export function loadConnectedSnapshot(): VehicleSnapshot | null {
@@ -58,13 +73,13 @@ export function saveConnectedSnapshot(snapshot: VehicleSnapshot): VehicleSnapsho
     ...snapshot,
     identity: { ...snapshot.identity, plateMasked: snapshot.identity.plateMasked },
   }
-  Storage.set(WIDGET_SNAPSHOT_KEY, widgetProjection)
+  Storage.set(WIDGET_SNAPSHOT_KEY, widgetProjection, SHARED)
   return snapshot
 }
 
 export function loadWidgetSnapshot(): VehicleSnapshot {
   if (loadRuntimeMode() === "connected") {
-    const projected = Storage.get<VehicleSnapshot>(WIDGET_SNAPSHOT_KEY)
+    const projected = Storage.get<VehicleSnapshot>(WIDGET_SNAPSHOT_KEY, SHARED)
     if (isValidSnapshot(projected) && projected.source === "network") return projected
   }
   const demo = Storage.get<VehicleSnapshot>(SNAPSHOT_KEY)
