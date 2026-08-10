@@ -1,7 +1,6 @@
 import type { CompanionSettings, Freshness, VehicleSnapshot, WidgetParameter } from "./domain"
 import { makeDemoSnapshot } from "./fixtures"
 
-const SHARED = { shared: true }
 const SNAPSHOT_KEY = "bmw.companion.v2.snapshot.demo-bmw-i4"
 const NETWORK_SNAPSHOT_KEY = "bmw.companion.v2.snapshot.connected"
 const WIDGET_SNAPSHOT_KEY = "bmw.companion.v2.snapshot.widget-projection"
@@ -19,9 +18,9 @@ export const defaultSettings: CompanionSettings = {
 }
 
 export function loadSettings(): CompanionSettings {
-  const value = Storage.get<CompanionSettings>(SETTINGS_KEY, SHARED)
+  const value = Storage.get<CompanionSettings>(SETTINGS_KEY)
   if (!value || value.schemaVersion !== 1) {
-    Storage.set(SETTINGS_KEY, defaultSettings, SHARED)
+    Storage.set(SETTINGS_KEY, defaultSettings)
     return defaultSettings
   }
   return { ...defaultSettings, ...value }
@@ -29,25 +28,24 @@ export function loadSettings(): CompanionSettings {
 
 export function saveSettings(settings: CompanionSettings): CompanionSettings {
   const next = { ...defaultSettings, ...settings, schemaVersion: 1 as const }
-  Storage.set(SETTINGS_KEY, next, SHARED)
+  Storage.set(SETTINGS_KEY, next)
   return next
 }
 
 export type RuntimeMode = "demo" | "connected"
 
 export function loadRuntimeMode(): RuntimeMode {
-  return Storage.get<RuntimeMode>(RUNTIME_MODE_KEY, SHARED) === "connected" ? "connected" : "demo"
+  return Storage.get<RuntimeMode>(RUNTIME_MODE_KEY) === "connected" ? "connected" : "demo"
 }
 
 export function setRuntimeMode(mode: RuntimeMode): void {
-  Storage.set(RUNTIME_MODE_KEY, mode, SHARED)
+  Storage.set(RUNTIME_MODE_KEY, mode)
 }
 
 export function loadConnectedSnapshot(): VehicleSnapshot | null {
-  // Must use the cross-script shared domain: the connected snapshot is written
-  // from the app UI (index.tsx / connection-page) but also read by the widget
-  // and by dashboard runs. Per-script (non-shared) storage would hide it.
-  const value = Storage.get<VehicleSnapshot>(NETWORK_SNAPSHOT_KEY, SHARED)
+  // 插件私有存储（per-script）：数据只属于本插件。注意：桌面组件可能读不到
+  // 主 App 写入的私有数据（组件扩展与主 App 存储隔离），若组件失效需改回共享池。
+  const value = Storage.get<VehicleSnapshot>(NETWORK_SNAPSHOT_KEY)
   return isValidSnapshot(value) && value.source === "network" ? value : null
 }
 
@@ -55,21 +53,21 @@ export function saveConnectedSnapshot(snapshot: VehicleSnapshot): VehicleSnapsho
   if (!isValidSnapshot(snapshot) || snapshot.source !== "network") {
     throw new Error("CONNECTED_SNAPSHOT_INVALID")
   }
-  Storage.set(NETWORK_SNAPSHOT_KEY, snapshot, SHARED)
+  Storage.set(NETWORK_SNAPSHOT_KEY, snapshot)
   const widgetProjection: VehicleSnapshot = {
     ...snapshot,
     identity: { ...snapshot.identity, plateMasked: snapshot.identity.plateMasked },
   }
-  Storage.set(WIDGET_SNAPSHOT_KEY, widgetProjection, SHARED)
+  Storage.set(WIDGET_SNAPSHOT_KEY, widgetProjection)
   return snapshot
 }
 
 export function loadWidgetSnapshot(): VehicleSnapshot {
   if (loadRuntimeMode() === "connected") {
-    const projected = Storage.get<VehicleSnapshot>(WIDGET_SNAPSHOT_KEY, SHARED)
+    const projected = Storage.get<VehicleSnapshot>(WIDGET_SNAPSHOT_KEY)
     if (isValidSnapshot(projected) && projected.source === "network") return projected
   }
-  const demo = Storage.get<VehicleSnapshot>(SNAPSHOT_KEY, SHARED)
+  const demo = Storage.get<VehicleSnapshot>(SNAPSHOT_KEY)
   return isValidSnapshot(demo) ? demo : makeDemoSnapshot()
 }
 
@@ -78,10 +76,10 @@ export function loadSnapshot(): VehicleSnapshot {
     const connected = loadConnectedSnapshot()
     if (connected) return connected
   }
-  const value = Storage.get<VehicleSnapshot>(SNAPSHOT_KEY, SHARED)
+  const value = Storage.get<VehicleSnapshot>(SNAPSHOT_KEY)
   if (!isValidSnapshot(value)) {
     const seeded = makeDemoSnapshot()
-    Storage.set(SNAPSHOT_KEY, seeded, SHARED)
+    Storage.set(SNAPSHOT_KEY, seeded)
     return seeded
   }
   return value
@@ -96,18 +94,18 @@ export function refreshDemoSnapshot(): VehicleSnapshot {
     cachedAt: now.toISOString(),
     source: "fixture",
   }
-  Storage.set(SNAPSHOT_KEY, next, SHARED)
+  Storage.set(SNAPSHOT_KEY, next)
   return next
 }
 
 export function resetDemoSnapshot(): VehicleSnapshot {
   const next = makeDemoSnapshot()
-  Storage.set(SNAPSHOT_KEY, next, SHARED)
+  Storage.set(SNAPSHOT_KEY, next)
   return next
 }
 
 export function recordWidgetReload(): void {
-  Storage.set(WIDGET_RELOAD_KEY, new Date().toISOString(), SHARED)
+  Storage.set(WIDGET_RELOAD_KEY, new Date().toISOString())
 }
 
 export function parseWidgetParameter(raw?: string): WidgetParameter {
