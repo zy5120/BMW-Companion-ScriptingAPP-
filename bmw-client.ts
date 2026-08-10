@@ -174,7 +174,6 @@ async function createAndVerifyCaptcha(mobile: string): Promise<CaptchaChallenge>
 
 // 参考脚本 getSliderCaptcha 的随机 x 兜底：x = 前缀 + md5(uuid) + md5(uuid)，截取 64 位
 const HEADERS_X_KEY = "bmw.companion.v2.headersX"
-const SHARED = { shared: true }
 
 function uuidv4(): string {
   return "xxxxxxxx-xxxx-4xxx-yxxx-xxxxxxxxxxxx".replace(/[xy]/g, c => {
@@ -197,7 +196,7 @@ function randomHeadersX(): Record<string, string> {
 
 function loadPersistedHeadersX(): Record<string, string> {
   try {
-    const saved = Storage.get<Record<string, string>>(HEADERS_X_KEY, SHARED)
+    const saved = Storage.get<Record<string, string>>(HEADERS_X_KEY)
     if (saved && typeof saved.x === "string" && saved.x.length === 64) return saved
   } catch {}
   return COMPAT_HEADERS_X
@@ -208,7 +207,7 @@ let currentHeadersX: Record<string, string> = loadPersistedHeadersX()
 
 function persistHeadersX(): void {
   try {
-    Storage.set(HEADERS_X_KEY, currentHeadersX, SHARED)
+    Storage.set(HEADERS_X_KEY, currentHeadersX)
   } catch {}
 }
 
