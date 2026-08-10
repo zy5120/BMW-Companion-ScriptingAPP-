@@ -17,6 +17,12 @@ export const BMW_HEADERS: Record<string, string> = {
   "user-agent": BMW_CLIENT.dartUserAgent,
 }
 
+// 车联网接口用 x-user-agent 里的品牌标识（bmw / mini）过滤车辆数据。
+// MINI 与宝马共用同一套 eadrax 接口，只是品牌标识不同（App 版本相同）。
+export function brandUserAgent(brand: "BMW" | "MINI"): string {
+  return `ios(17.6.1);${brand === "MINI" ? "mini" : "bmw"};5.14.0(58417);cn`
+}
+
 // Reference script values. Temporary compatibility only; never rotate/probe automatically.
 export const COMPAT_CORRELATION_ID = "meiDaiSan-only-used-xid"
 export const COMPAT_X = "cd16030b4acc1006694040177d4de3fd434a78b4b872397ff77ac7fad6be93d3"
