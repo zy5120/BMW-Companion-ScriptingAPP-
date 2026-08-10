@@ -291,12 +291,14 @@ function MediumWidget({ snapshot, logo, car, privacy }: {
             <Text font={10}>{consumptionText(snapshot)}</Text>
           </HStack>
         </HStack>
-        <HStack spacing={10}>
-          <TirePair label="左前" tire={snapshot.tires?.frontLeft} />
-          <TirePair label="右前" tire={snapshot.tires?.frontRight} />
-          <TirePair label="左后" tire={snapshot.tires?.rearLeft} />
-          <TirePair label="右后" tire={snapshot.tires?.rearRight} />
-        </HStack>
+        {snapshot.tires ? (
+          <HStack spacing={10}>
+            <TirePair label="左前" tire={snapshot.tires?.frontLeft} />
+            <TirePair label="右前" tire={snapshot.tires?.frontRight} />
+            <TirePair label="左后" tire={snapshot.tires?.rearLeft} />
+            <TirePair label="右后" tire={snapshot.tires?.rearRight} />
+          </HStack>
+        ) : null}
         <LockRow snapshot={snapshot} />
         <HStack spacing={3}>
           <Image systemName="location.fill" font={9} foregroundStyle="secondaryLabel" />
@@ -386,18 +388,20 @@ function LargeWidget({ snapshot, logo, mapImage, privacy }: {
         <LogoView logo={logo} size={22} />
       </HStack>
 
-      {/* 数据卡：左侧胎压 2×2（按车轮逻辑位置），右侧油量/能耗/续航/总里程 */}
+      {/* 数据卡：左侧胎压 2×2（按车轮逻辑位置），右侧油量/能耗/续航/总里程；无胎压数据时仅显示右侧 */}
       <HStack spacing={10} padding={10} background={SUB_BG} clipShape={{ type: "rect", cornerRadius: 13 }}>
-        <VStack alignment="leading" spacing={6} frame={{ width: 118, alignment: "leading" }}>
-          <HStack spacing={12}>
-            <TireCell label="左前" tire={snapshot.tires?.frontLeft} />
-            <TireCell label="右前" tire={snapshot.tires?.frontRight} />
-          </HStack>
-          <HStack spacing={12}>
-            <TireCell label="左后" tire={snapshot.tires?.rearLeft} />
-            <TireCell label="右后" tire={snapshot.tires?.rearRight} />
-          </HStack>
-        </VStack>
+        {snapshot.tires ? (
+          <VStack alignment="leading" spacing={6} frame={{ width: 118, alignment: "leading" }}>
+            <HStack spacing={12}>
+              <TireCell label="左前" tire={snapshot.tires?.frontLeft} />
+              <TireCell label="右前" tire={snapshot.tires?.frontRight} />
+            </HStack>
+            <HStack spacing={12}>
+              <TireCell label="左后" tire={snapshot.tires?.rearLeft} />
+              <TireCell label="右后" tire={snapshot.tires?.rearRight} />
+            </HStack>
+          </VStack>
+        ) : null}
         <VStack alignment="leading" spacing={6} frame={{ maxWidth: Infinity, alignment: "leading" }}>
           <HStack spacing={12}>
             <LargeStat icon="fuelpump.fill" value={fuelLevelText(snapshot)} label="油量" />
