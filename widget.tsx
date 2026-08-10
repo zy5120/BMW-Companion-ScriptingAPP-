@@ -430,14 +430,14 @@ function LargeWidget({ snapshot, logo, mapImage, privacy }: {
         </HStack>
       </VStack>
 
-      {/* 下半部分：地图 */}
+      {/* 下半部分：地图（大图填充裁剪，超出部分隐藏） */}
       <Spacer minLength={0} />
       {!privacy && mapImage ? (
         <Link url={deepLink("location")}>
           <Image
             image={mapImage}
             resizable
-            scaleToFit
+            scaleToFill
             frame={{ maxWidth: Infinity, maxHeight: Infinity }}
             clipShape={{ type: "rect", cornerRadius: 14 }}
           />
