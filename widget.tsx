@@ -21,6 +21,7 @@ import {
   loadWidgetSnapshot,
   parseWidgetParameter,
   resolvePrivacy,
+  scriptKeyNamespace,
 } from "./storage"
 
 const ACCENT = "#166DFF"
@@ -45,12 +46,10 @@ function doorWindowStatus(snapshot: VehicleSnapshot): { safe: boolean; text: str
   if (a.lock === "unknown") return { safe: false, text: "状态未知" }
   if (a.lock !== "locked") return { safe: false, text: "已解锁" }
   if (a.doors === "closed" && a.windows === "closed") {
-    if (a.roof === "closed") {
-      if (a.hood === "open") return { safe: false, text: "引擎盖打开" }
-      if (a.trunk === "open") return { safe: false, text: "后备箱打开" }
-      return { safe: true, text: "门窗已关闭" }
-    }
-    return { safe: false, text: "天窗未关闭" }
+    if (a.roof === "open") return { safe: false, text: "天窗未关闭" }
+    if (a.hood === "open") return { safe: false, text: "引擎盖打开" }
+    if (a.trunk === "open") return { safe: false, text: "后备箱打开" }
+    return { safe: true, text: "门窗已关闭" }
   }
   return { safe: false, text: "门窗未关闭" }
 }
@@ -123,11 +122,11 @@ function LogoView({ logo, size = 20 }: { logo: UIImage | null; size?: number }) 
 
 function CarView({ car }: { car: UIImage | null }) {
   return (
-    <ZStack frame={{ maxWidth: Infinity, maxHeight: Infinity }}>
+    <ZStack frame={{ maxWidth: Infinity, maxHeight: 108 }}>
       {car ? (
-        <Image image={car} resizable scaleToFit frame={{ maxWidth: Infinity, maxHeight: Infinity }} />
+        <Image image={car} resizable scaleToFit frame={{ maxWidth: Infinity, maxHeight: 108 }} />
       ) : (
-        <Image systemName="car.side.fill" font={40} foregroundStyle={ACCENT} />
+        <Image systemName="car.side.fill" font={46} foregroundStyle={ACCENT} />
       )}
     </ZStack>
   )
@@ -157,8 +156,9 @@ function LockRow({ snapshot, showUpdate = true }: { snapshot: VehicleSnapshot; s
 
 function TirePair({ label, tire }: { label: string; tire?: { pressureBar?: number; status?: string } }) {
   return (
-    <HStack spacing={3}>
+    <HStack spacing={3} frame={{ maxWidth: Infinity, alignment: "leading" }}>
       <Text font={9} foregroundStyle="secondaryLabel">{label}</Text>
+      <Spacer minLength={0} />
       <Text font={10} fontWeight="semibold" foregroundStyle={tirePairColor(tire?.status)}>
         {tire?.pressureBar != null ? tire.pressureBar.toFixed(1) : "—"}
       </Text>
@@ -240,73 +240,69 @@ function SmallWidget({ snapshot, car }: { snapshot: VehicleSnapshot; car: UIImag
 
 // ---------- 中号（参考 renderMedium） ----------
 
-function MediumWidget({ snapshot, logo, car, privacy }: {
+function MediumRow({ icon, label, value }: { icon: string; label: string; value: string }) {
+  return (
+    <HStack spacing={4} frame={{ maxWidth: Infinity, alignment: "leading" }}>
+      <Image systemName={icon} font={9} foregroundStyle={ACCENT} frame={{ width: 13 }} />
+      <Text font={8} foregroundStyle="secondaryLabel">{label}</Text>
+      <Spacer minLength={0} />
+      <Text font={9} fontWeight="semibold" lineLimit={1} minScaleFactor={0.7}>{value}</Text>
+    </HStack>
+  )
+}
+
+function MediumWidget({ snapshot, car, privacy }: {
   snapshot: VehicleSnapshot
-  logo: UIImage | null
   car: UIImage | null
   privacy: boolean
 }) {
   const dw = doorWindowStatus(snapshot)
   return (
     <HStack
-      spacing={12}
+      spacing={14}
       padding={14}
       frame={{ maxWidth: Infinity, maxHeight: Infinity, alignment: "leading" }}
       widgetURL={deepLink("overview")}
       widgetBackground={CARD_BG}
     >
-      <VStack alignment="leading" spacing={7} frame={{ maxWidth: Infinity, alignment: "leading" }}>
-        <HStack spacing={6}>
-          <Text font="subheadline" fontWeight="bold" lineLimit={1} minScaleFactor={0.7}>
-            {snapshot.identity.displayName}
-          </Text>
-          <Spacer minLength={0} />
-          {snapshot.identity.plateMasked ? (
-            <Text font={9} foregroundStyle="secondaryLabel">{snapshot.identity.plateMasked}</Text>
-          ) : null}
+      {/* 左半边（60%）：全部车况参数，两列网格排布；填满高度，末两行压到底部与右侧状态对齐 */}
+      <VStack alignment="leading" spacing={4} frame={{ width: 172, maxHeight: Infinity, alignment: "topLeading" }}>
+        <Text font="title3" fontWeight="bold" lineLimit={1} minScaleFactor={0.6}>
+          {snapshot.identity.displayName}
+        </Text>
+        {/* 两列：里程 | 续航 */}
+        <HStack spacing={10} frame={{ maxWidth: Infinity, alignment: "leading" }}>
+          <MediumRow icon="gauge.with.dots.needle.67percent" label="里程" value={snapshot.mileageKm != null ? `${snapshot.mileageKm.toLocaleString()}㎞` : "—"} />
+          <MediumRow icon="map" label="续航" value={snapshot.energy.rangeKm != null ? `${snapshot.energy.rangeKm}㎞` : "—㎞"} />
         </HStack>
-        <HStack spacing={10}>
-          <HStack spacing={3}>
-            <Image systemName="gauge.with.dots.needle.67percent" font={10} foregroundStyle={ACCENT} />
-            <Text font={10} fontWeight="semibold">
-              {snapshot.mileageKm != null ? `${snapshot.mileageKm.toLocaleString()}㎞` : "—"}
-            </Text>
-          </HStack>
-          <HStack spacing={3}>
-            <Image systemName="map" font={10} foregroundStyle={ACCENT} />
-            <Text font={10} fontWeight="semibold">
-              {snapshot.energy.rangeKm != null ? `${snapshot.energy.rangeKm}㎞` : "—㎞"}
-            </Text>
-          </HStack>
+        {/* 两列：油量 | 油耗 */}
+        <HStack spacing={10} frame={{ maxWidth: Infinity, alignment: "leading" }}>
+          <MediumRow icon="fuelpump.fill" label="油量" value={fuelLevelText(snapshot)} />
+          <MediumRow icon="flame.fill" label="油耗" value={snapshot.energy.consumption != null ? `${snapshot.energy.consumption} L` : "—"} />
         </HStack>
-        <HStack spacing={10}>
-          <HStack spacing={3}>
-            <Image systemName="fuelpump.fill" font={10} foregroundStyle={ACCENT} />
-            <Text font={10}>{fuelLevelText(snapshot)}</Text>
-          </HStack>
-          <HStack spacing={3}>
-            <Image systemName="flame.fill" font={10} foregroundStyle={ACCENT} />
-            <Text font={10}>{consumptionText(snapshot)}</Text>
-          </HStack>
-        </HStack>
+        {/* 胎压 2×2：左前|右前 / 左后|右后 */}
         {snapshot.tires ? (
-          <HStack spacing={10}>
-            <TirePair label="左前" tire={snapshot.tires?.frontLeft} />
-            <TirePair label="右前" tire={snapshot.tires?.frontRight} />
-            <TirePair label="左后" tire={snapshot.tires?.rearLeft} />
-            <TirePair label="右后" tire={snapshot.tires?.rearRight} />
-          </HStack>
+          <VStack alignment="leading" spacing={4} frame={{ maxWidth: Infinity, alignment: "leading" }}>
+            <HStack spacing={10} frame={{ maxWidth: Infinity, alignment: "leading" }}>
+              <TirePair label="左前" tire={snapshot.tires?.frontLeft} />
+              <TirePair label="右前" tire={snapshot.tires?.frontRight} />
+            </HStack>
+            <HStack spacing={10} frame={{ maxWidth: Infinity, alignment: "leading" }}>
+              <TirePair label="左后" tire={snapshot.tires?.rearLeft} />
+              <TirePair label="右后" tire={snapshot.tires?.rearRight} />
+            </HStack>
+          </VStack>
         ) : null}
-        <LockRow snapshot={snapshot} />
-        <HStack spacing={3}>
-          <Image systemName="location.fill" font={9} foregroundStyle="secondaryLabel" />
-          <Text font={9} foregroundStyle="secondaryLabel" lineLimit={1}>
-            {privacy ? "位置已隐藏" : (snapshot.location?.address ?? "位置不可用")}
-          </Text>
-          <Spacer minLength={0} />
-        </HStack>
+        {/* 弹性空隙：把下方行压到组件底部，与右侧状态标签同一行 */}
+        <Spacer minLength={0} />
+        {/* 更新时间 */}
+        <MediumRow icon="clock.fill" label="更新" value={formatSyncTime(snapshot.vehicleObservedAt)} />
+        {/* 车辆定位信息 */}
+        <MediumRow icon="location.fill" label="位置" value={privacy ? "位置已隐藏" : (snapshot.location?.address ?? "位置不可用")} />
       </VStack>
-      <VStack alignment="center" spacing={5} frame={{ width: 92, alignment: "center" }}>
+      {/* 右半边（40%）：车辆配图 + 右下角门窗/天窗状态；内容底部对齐 */}
+      <VStack alignment="center" spacing={4} frame={{ width: 115, maxHeight: Infinity, alignment: "bottom" }}>
+        <Spacer minLength={0} />
         <CarView car={car} />
         <HStack spacing={3}>
           <Image
@@ -475,7 +471,7 @@ function freshnessColor(value: string): string {
 // 读取 App 在「停车位置」页/刷新时生成的 Apple 原生地图快照（App Group 共享目录，组件可读）
 async function loadMapImage(): Promise<UIImage | null> {
   try {
-    const path = `${FileManager.appGroupDocumentsDirectory}/car-location-map.png`
+    const path = `${FileManager.appGroupDocumentsDirectory}/car-location-map-${scriptKeyNamespace()}.png`
     return UIImage.fromFile(path)
   } catch {
     return null
@@ -514,7 +510,7 @@ async function main() {
       content = <SmallWidget snapshot={snapshot} car={car} />
       break
     case "systemMedium":
-      content = <MediumWidget snapshot={snapshot} logo={logo} car={car} privacy={privacy} />
+      content = <MediumWidget snapshot={snapshot} car={car} privacy={privacy} />
       break
     case "systemLarge":
     case "systemExtraLarge":
