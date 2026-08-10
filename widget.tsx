@@ -313,9 +313,10 @@ function MediumWidget({ snapshot, logo, car, privacy }: {
 
 // ---------- 大号（参考 renderLarge：中号信息 + 底部大图/状态） ----------
 
-function LargeWidget({ snapshot, logo, privacy }: {
+function LargeWidget({ snapshot, logo, mapImage, privacy }: {
   snapshot: VehicleSnapshot
   logo: UIImage | null
+  mapImage: UIImage | null
   privacy: boolean
 }) {
   const freshness = getFreshness(snapshot)
@@ -378,25 +379,9 @@ function LargeWidget({ snapshot, logo, privacy }: {
         <Text font={9} foregroundStyle={freshnessColor(freshness) as any}>{freshnessLabel(freshness)}</Text>
       </HStack>
       <Spacer minLength={0} />
-      {!privacy && snapshot.location ? (
+      {!privacy && mapImage ? (
         <Link url={deepLink("location")}>
-          <Map
-            initialCameraPosition={MapCameraPosition.region({
-              center: { latitude: snapshot.location.latitude, longitude: snapshot.location.longitude },
-              span: { latitudeDelta: 0.002, longitudeDelta: 0.002 },
-            })}
-            allowsHitTesting={false}
-            mapStyle={{ style: "standard" }}
-            frame={{ maxWidth: Infinity, maxHeight: Infinity }}
-            clipShape={{ type: "rect", cornerRadius: 14 }}
-          >
-            <Marker
-              title={snapshot.identity.displayName}
-              coordinate={{ latitude: snapshot.location.latitude, longitude: snapshot.location.longitude }}
-              systemImage="car.fill"
-              tint={ACCENT}
-            />
-          </Map>
+          <Image image={mapImage} resizable scaleToFit frame={{ maxWidth: Infinity, maxHeight: Infinity }} clipShape={{ type: "rect", cornerRadius: 14 }} />
         </Link>
       ) : (
         <Link url={deepLink("location")}>
@@ -444,6 +429,16 @@ function freshnessColor(value: string): string {
   }
 }
 
+// 读取 App 在「停车位置」页截图的 Apple 原生地图（App Group 共享目录，组件可读）
+async function loadMapImage(): Promise<UIImage | null> {
+  try {
+    const path = `${FileManager.appGroupDocumentsDirectory}/car-location-map.png`
+    return UIImage.fromFile(path)
+  } catch {
+    return null
+  }
+}
+
 async function loadLogo(): Promise<UIImage | null> {
   try {
     const image = await Promise.race([
@@ -462,9 +457,10 @@ async function main() {
   const privacy = resolvePrivacy(parameter, loadSettings())
   const family = Widget.family
   const logo = await loadLogo()
-  // 只有小号/中号需要车辆图；大号底部是地图，跳过图片请求以减少空白风险
+  // 只有小号/中号需要车辆图；大号底部是地图截图或位置卡片
   const needsCar = family === "systemSmall" || family === "systemMedium"
   const car = needsCar ? await fetchOfficialCarImage(snapshot) : null
+  const mapImage = await loadMapImage()
 
   let content
   switch (family) {
@@ -479,7 +475,7 @@ async function main() {
       break
     case "systemLarge":
     case "systemExtraLarge":
-      content = <LargeWidget snapshot={snapshot} logo={logo} privacy={privacy} />
+      content = <LargeWidget snapshot={snapshot} logo={logo} mapImage={mapImage} privacy={privacy} />
       break
     default:
       content = <SmallWidget snapshot={snapshot} logo={logo} car={car} />
