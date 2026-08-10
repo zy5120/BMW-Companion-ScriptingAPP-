@@ -3,8 +3,6 @@ import {
   HStack,
   Image,
   Link,
-  Map,
-  Marker,
   Script,
   Spacer,
   Text,
@@ -370,91 +368,87 @@ function LargeWidget({ snapshot, logo, mapImage, privacy }: {
   return (
     <VStack
       alignment="leading"
-      spacing={8}
-      padding={12}
+      spacing={6}
+      padding={10}
       frame={{ maxWidth: Infinity, maxHeight: Infinity, alignment: "topLeading" }}
       widgetURL={deepLink("overview")}
       widgetBackground={CARD_BG}
     >
-      {/* 上半部分：信息 */}
-      <VStack alignment="leading" spacing={8} frame={{ maxWidth: Infinity, alignment: "topLeading" }}>
-        <HStack spacing={6}>
-          <Text font="title3" fontWeight="bold" lineLimit={1} minScaleFactor={0.7}>
-            {snapshot.identity.displayName}
-          </Text>
-          <Spacer minLength={0} />
-          {snapshot.identity.plateMasked ? (
-            <Text font={9} foregroundStyle="secondaryLabel">{snapshot.identity.plateMasked}</Text>
-          ) : null}
-          <LockBadge snapshot={snapshot} />
-          <LogoView logo={logo} size={20} />
-        </HStack>
+      {/* 头部：车名（留白防裁切）+ 车牌 + 锁车 + logo */}
+      <HStack spacing={6} frame={{ maxWidth: Infinity, alignment: "leading" }}>
+        <Text font="title3" fontWeight="bold" lineLimit={1} minScaleFactor={0.5} frame={{ maxWidth: Infinity, alignment: "leading" }}>
+          {snapshot.identity.displayName}
+        </Text>
+        <Spacer minLength={0} />
+        {snapshot.identity.plateMasked ? (
+          <Text font={8} foregroundStyle="secondaryLabel" lineLimit={1} minScaleFactor={0.6}>{snapshot.identity.plateMasked}</Text>
+        ) : null}
+        <LockBadge snapshot={snapshot} />
+        <LogoView logo={logo} size={18} />
+      </HStack>
 
-        {/* 数据卡：左侧胎压 2×2（按车轮逻辑位置），右侧油量/能耗/续航/总里程；无胎压数据时仅显示右侧 */}
-        <HStack spacing={8} padding={{ horizontal: 8, vertical: 7 }} background={SUB_BG} clipShape={{ type: "rect", cornerRadius: 12 }}>
-          {snapshot.tires ? (
-            <VStack alignment="leading" spacing={5} frame={{ width: 108, alignment: "leading" }}>
-              <HStack spacing={10}>
-                <TireCell label="左前" tire={snapshot.tires?.frontLeft} />
-                <TireCell label="右前" tire={snapshot.tires?.frontRight} />
-              </HStack>
-              <HStack spacing={10}>
-                <TireCell label="左后" tire={snapshot.tires?.rearLeft} />
-                <TireCell label="右后" tire={snapshot.tires?.rearRight} />
-              </HStack>
-            </VStack>
-          ) : null}
-          <VStack alignment="leading" spacing={5} frame={{ maxWidth: Infinity, alignment: "leading" }}>
+      {/* 信息卡：左 1/3 胎压 2×2（左上右上下左右下），右 2/3 油量/能耗/续航/总里程 */}
+      <HStack spacing={10} padding={9} background={SUB_BG} clipShape={{ type: "rect", cornerRadius: 12 }} frame={{ maxWidth: Infinity, alignment: "leading" }}>
+        {snapshot.tires ? (
+          <VStack alignment="leading" spacing={5} frame={{ width: 86, alignment: "leading" }}>
             <HStack spacing={10}>
-              <LargeStat icon="fuelpump.fill" value={fuelLevelText(snapshot)} label="油量" />
-              <LargeStat icon="flame.fill" value={consumptionText(snapshot)} label="能耗" />
+              <TireCell label="左前" tire={snapshot.tires?.frontLeft} />
+              <TireCell label="右前" tire={snapshot.tires?.frontRight} />
             </HStack>
             <HStack spacing={10}>
-              <LargeStat icon="map" value={snapshot.energy.rangeKm != null ? `${snapshot.energy.rangeKm}㎞` : "—㎞"} label="续航" />
-              <LargeStat icon="gauge.with.dots.needle.67percent" value={snapshot.mileageKm != null ? `${snapshot.mileageKm.toLocaleString()}㎞` : "—"} label="总里程" />
+              <TireCell label="左后" tire={snapshot.tires?.rearLeft} />
+              <TireCell label="右后" tire={snapshot.tires?.rearRight} />
             </HStack>
           </VStack>
-        </HStack>
+        ) : null}
+        <VStack alignment="leading" spacing={5} frame={{ maxWidth: Infinity, alignment: "leading" }}>
+          <HStack spacing={10}>
+            <LargeStat icon="fuelpump.fill" value={fuelLevelText(snapshot)} label="油量" />
+            <LargeStat icon="flame.fill" value={consumptionText(snapshot)} label="能耗" />
+          </HStack>
+          <HStack spacing={10}>
+            <LargeStat icon="map" value={snapshot.energy.rangeKm != null ? `${snapshot.energy.rangeKm}㎞` : "—㎞"} label="续航" />
+            <LargeStat icon="gauge.with.dots.needle.67percent" value={snapshot.mileageKm != null ? `${snapshot.mileageKm.toLocaleString()}㎞` : "—"} label="总里程" />
+          </HStack>
+        </VStack>
+      </HStack>
 
-        {/* 地址 + 数据状态 */}
-        <HStack spacing={3}>
-          <Image systemName="location.fill" font={9} foregroundStyle="secondaryLabel" />
-          <Text font={9} foregroundStyle="secondaryLabel" lineLimit={1}>
-            {privacy ? "位置已隐藏" : (snapshot.location?.address ?? "位置不可用")}
-          </Text>
-          <Spacer minLength={0} />
-          <Image systemName="circle.fill" font={5} foregroundStyle={freshnessColor(freshness) as any} />
-          <Text font={8} fontWeight="medium" foregroundStyle={freshnessColor(freshness) as any}>
-            {freshnessLabel(freshness)}
-          </Text>
-        </HStack>
-      </VStack>
+      {/* 分隔线：车况信息 / 地理位置 */}
+      <VStack frame={{ maxWidth: Infinity, height: 1 }} background={{ light: "#D1D1D6", dark: "#3A3A3C" } as any} />
 
-      {/* 下半部分：地图（自适应剩余高度，填充裁剪，宽度由组件约束） */}
-      {!privacy && mapImage ? (
-        <Link url={deepLink("location")}>
-          <ZStack
-            frame={{ maxWidth: Infinity, maxHeight: Infinity }}
-            clipShape={{ type: "rect", cornerRadius: 14 }}
-          >
-            <Image image={mapImage} resizable scaleToFill frame={{ maxWidth: Infinity, maxHeight: Infinity }} />
+      {/* 地图：静态快照（居中对齐；scaleToFill + 匹配宽高比快照，撑满无空隙且不撑宽） */}
+      <Spacer minLength={0} />
+      <HStack frame={{ maxWidth: Infinity, alignment: "center" }}>
+        {!privacy && mapImage ? (
+          <ZStack frame={{ maxWidth: Infinity, height: 220 }} clipShape={{ type: "rect", cornerRadius: 14 }}>
+            <Image image={mapImage} resizable scaleToFill frame={{ maxWidth: Infinity, height: 220 }} />
           </ZStack>
-        </Link>
-      ) : (
-        <Link url={deepLink("location")}>
+        ) : (
           <VStack
             alignment="center"
             spacing={4}
-            frame={{ maxWidth: Infinity, maxHeight: Infinity }}
+            frame={{ maxWidth: Infinity, height: 220 }}
             background={SUB_BG}
             clipShape={{ type: "rect", cornerRadius: 14 }}
           >
-            <Image systemName={privacy ? "eye.slash.fill" : "map.fill"} font={26} foregroundStyle={ACCENT} />
-            <Text font={11} fontWeight="semibold">{privacy ? "地图已隐藏（隐私模式）" : "车辆停放位置"}</Text>
-            <Text font={9} foregroundStyle="secondaryLabel">点按打开原生地图</Text>
+            <Image systemName={privacy ? "eye.slash.fill" : "map.fill"} font={22} foregroundStyle="secondaryLabel" />
+            <Text font={9} foregroundStyle="secondaryLabel">{privacy ? "地图已隐藏" : "位置不可用"}</Text>
           </VStack>
-        </Link>
-      )}
+        )}
+      </HStack>
+
+      {/* 地址 + 数据状态（地图下方） */}
+      <HStack spacing={3} frame={{ maxWidth: Infinity, alignment: "leading" }}>
+        <Image systemName="location.fill" font={9} foregroundStyle="secondaryLabel" />
+        <Text font={9} foregroundStyle="secondaryLabel" lineLimit={1} frame={{ maxWidth: Infinity, alignment: "leading" }}>
+          {privacy ? "位置已隐藏" : (snapshot.location?.address ?? "位置不可用")}
+        </Text>
+        <Spacer minLength={0} />
+        <Image systemName="circle.fill" font={5} foregroundStyle={freshnessColor(freshness) as any} />
+        <Text font={8} fontWeight="medium" foregroundStyle={freshnessColor(freshness) as any}>
+          {freshnessLabel(freshness)}
+        </Text>
+      </HStack>
     </VStack>
   )
 }
@@ -478,7 +472,7 @@ function freshnessColor(value: string): string {
   }
 }
 
-// 读取 App 在「停车位置」页截图的 Apple 原生地图（App Group 共享目录，组件可读）
+// 读取 App 在「停车位置」页/刷新时生成的 Apple 原生地图快照（App Group 共享目录，组件可读）
 async function loadMapImage(): Promise<UIImage | null> {
   try {
     const path = `${FileManager.appGroupDocumentsDirectory}/car-location-map.png`
@@ -506,7 +500,7 @@ async function main() {
   const privacy = resolvePrivacy(parameter, loadSettings())
   const family = Widget.family
   const logo = await loadLogo()
-  // 只有小号/中号需要车辆图；大号底部是地图截图或位置卡片
+  // 只有小号/中号需要车辆图；大号下半部分是静态地图快照
   const needsCar = family === "systemSmall" || family === "systemMedium"
   const car = needsCar ? await fetchOfficialCarImage(snapshot) : null
   const mapImage = await loadMapImage()
