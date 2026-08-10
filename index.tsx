@@ -58,6 +58,11 @@ const PROJECT_NAME = "BMW Companion"
 const ACCENT = "#166DFF"
 const CARD = "secondarySystemBackground"
 
+// 车况展示按所选车辆品牌切换（BMW / MINI）
+function vehicleBrand(snapshot: VehicleSnapshot): string {
+  return snapshot.identity.brand?.toLowerCase() === "mini" ? "MINI" : "BMW"
+}
+
 declare const Dialog: any
 declare const Safari: any
 
@@ -218,7 +223,7 @@ function VehicleHeader({ snapshot }: { snapshot: VehicleSnapshot }) {
           color={freshnessColor(freshness)}
         />
         <Text font="caption" foregroundStyle="tertiaryLabel">
-          {formatRelativeTime(snapshot.fetchedAt)} · {snapshot.source === "network" ? "BMW 数据" : "演示数据"}
+          {formatRelativeTime(snapshot.fetchedAt)} · {snapshot.source === "network" ? `${vehicleBrand(snapshot)} 数据` : "演示数据"}
         </Text>
       </HStack>
       <Text font="caption" foregroundStyle="tertiaryLabel">
@@ -264,11 +269,14 @@ function StatusDetailsPage({ showClose = false }: { showClose?: boolean }) {
         </HStack>
       </Section>
       <Section header={<Text font="headline">门窗状态</Text>}>
-        <AccessRow icon="car.side.front.open" label="车门" state={snapshot.access.doors} />
-        <AccessRow icon="rectangle.split.3x1" label="车窗" state={snapshot.access.windows} />
-        <AccessRow icon="sunroof.fill" label="天窗" state={snapshot.access.roof} />
-        <AccessRow icon="car.side.front.open" label="引擎盖" state={snapshot.access.hood} />
-        <AccessRow icon="car.side.rear.open" label="后备箱" state={snapshot.access.trunk} />
+        {snapshot.access.doors !== "unknown" ? <AccessRow icon="car.side.front.open" label="车门" state={snapshot.access.doors} /> : null}
+        {snapshot.access.windows !== "unknown" ? <AccessRow icon="rectangle.split.3x1" label="车窗" state={snapshot.access.windows} /> : null}
+        {snapshot.access.roof !== "unknown" ? <AccessRow icon="sunroof.fill" label="天窗" state={snapshot.access.roof} /> : null}
+        {snapshot.access.hood !== "unknown" ? <AccessRow icon="car.side.front.open" label="引擎盖" state={snapshot.access.hood} /> : null}
+        {snapshot.access.trunk !== "unknown" ? <AccessRow icon="car.side.rear.open" label="后备箱" state={snapshot.access.trunk} /> : null}
+        {snapshot.access.doors === "unknown" && snapshot.access.windows === "unknown" && snapshot.access.roof === "unknown" && snapshot.access.hood === "unknown" && snapshot.access.trunk === "unknown" ? (
+          <Text font="caption" foregroundStyle="secondaryLabel">该车辆未提供门窗状态数据。</Text>
+        ) : null}
       </Section>
     </List>
   )
@@ -292,7 +300,7 @@ function TireDetailsPage() {
       <VStack spacing={16} padding={16}>
         <VStack alignment="leading" spacing={5} frame={{ maxWidth: Infinity, alignment: "leading" }}>
           <Text font="title2" fontWeight="bold">四轮胎压</Text>
-          <Text font="subheadline" foregroundStyle="secondaryLabel">{snapshot.source === "network" ? "数值来自最近一次 BMW 连接快照。" : "数值来自本地演示快照，仅用于布局验证。"}</Text>
+          <Text font="subheadline" foregroundStyle="secondaryLabel">{snapshot.source === "network" ? `数值来自最近一次 ${vehicleBrand(snapshot)} 连接快照。` : "数值来自本地演示快照，仅用于布局验证。"}</Text>
         </VStack>
         <LazyVGrid
           columns={[
@@ -301,10 +309,26 @@ function TireDetailsPage() {
           ]}
           spacing={10}
         >
-          <TireCard tirePosition="左前" tire={snapshot.tires?.frontLeft} />
-          <TireCard tirePosition="右前" tire={snapshot.tires?.frontRight} />
-          <TireCard tirePosition="左后" tire={snapshot.tires?.rearLeft} />
-          <TireCard tirePosition="右后" tire={snapshot.tires?.rearRight} />
+          {snapshot.tires ? (
+            <>
+              <TireCard tirePosition="左前" tire={snapshot.tires.frontLeft} />
+              <TireCard tirePosition="右前" tire={snapshot.tires.frontRight} />
+              <TireCard tirePosition="左后" tire={snapshot.tires.rearLeft} />
+              <TireCard tirePosition="右后" tire={snapshot.tires.rearRight} />
+            </>
+          ) : (
+            <VStack
+              alignment="center"
+              spacing={6}
+              padding={24}
+              frame={{ maxWidth: Infinity, alignment: "center" }}
+              background={CARD}
+              clipShape={{ type: "rect", cornerRadius: 16 }}
+            >
+              <Image systemName="tirepressure" font={30} foregroundStyle="secondaryLabel" />
+              <Text font="subheadline" foregroundStyle="secondaryLabel">该车辆未提供胎压数据。</Text>
+            </VStack>
+          )}
         </LazyVGrid>
       </VStack>
     </ScrollView>
@@ -468,7 +492,7 @@ function SettingsPage() {
       </Section>
       <Section
         header={<Text font="headline">本地数据</Text>}
-        footer={<Text font="caption">演示快照与最后一次有效 BMW 快照分开保存；网络失败不会覆盖旧数据。</Text>}
+        footer={<Text font="caption">演示快照与最后一次有效车况快照分开保存；网络失败不会覆盖旧数据。</Text>}
       >
         <Button
           title="重置演示快照"
@@ -546,6 +570,7 @@ function DashboardPage() {
   const [refreshStatus, setRefreshStatus] = useState("")
   const freshness = getFreshness(snapshot)
   const safety = safetySummary(snapshot)
+  const brand = vehicleBrand(snapshot)
   const detailsDestination = useMemo(() => <StatusDetailsPage />, [])
   const tireDestination = useMemo(() => <TireDetailsPage />, [])
   const previewDestination = useMemo(() => <WidgetPreviewPage />, [])
@@ -557,12 +582,12 @@ function DashboardPage() {
     if (!session) {
       const next = refreshDemoSnapshot()
       setSnapshot(next)
-      setRefreshStatus("未连接 BMW，已刷新演示快照")
+      setRefreshStatus("未连接车辆，已刷新演示快照")
       Widget.reloadAll()
       return
     }
     setRefreshing(true)
-    setRefreshStatus("正在读取 BMW 车况…")
+    setRefreshStatus(`正在读取 ${brand} 车况…`)
     try {
       let usable = session
       if (Date.parse(session.accessTokenExpiresAt) <= Date.now() + 60_000) {
@@ -573,7 +598,7 @@ function DashboardPage() {
       saveConnectedSnapshot(next)
       setRuntimeMode("connected")
       setSnapshot(next)
-      setRefreshStatus("BMW 车况已更新")
+      setRefreshStatus(`${brand} 车况已更新`)
       Widget.reloadAll()
       // 自动生成停车位置地图快照（离屏渲染），供桌面大号组件使用
       if (next.location) {
@@ -604,7 +629,7 @@ function DashboardPage() {
         ],
         topBarTrailing: [
           <Button
-            title={refreshing ? "正在刷新" : loadSession() ? "刷新 BMW 车况" : "刷新演示数据"}
+            title={refreshing ? "正在刷新" : loadSession() ? `刷新 ${brand} 车况` : "刷新演示数据"}
             systemImage="arrow.clockwise"
             disabled={refreshing}
             action={() => void refresh()}
@@ -637,7 +662,7 @@ function DashboardPage() {
             icon="gauge.with.dots.needle.67percent"
             title="总里程"
             value={snapshot.mileageKm != null ? `${snapshot.mileageKm.toLocaleString()} km` : "—"}
-            subtitle={snapshot.source === "network" ? "BMW 只读快照" : "本地演示快照"}
+            subtitle={snapshot.source === "network" ? `${brand} 只读快照` : "本地演示快照"}
           />
         </LazyVGrid>
 
@@ -729,7 +754,7 @@ function DashboardPage() {
         <HStack spacing={7}>
           <Image systemName="shield.lefthalf.filled" foregroundStyle={freshnessColor(freshness) as any} />
           <Text font="caption" foregroundStyle="secondaryLabel">
-            {`${freshnessLabel(freshness)} · ${snapshot.source === "network" ? "BMW 只读数据" : "演示模式"}`}
+            {`${freshnessLabel(freshness)} · ${snapshot.source === "network" ? `${brand} 只读数据` : "演示模式"}`}
           </Text>
         </HStack>
         {refreshStatus ? (
