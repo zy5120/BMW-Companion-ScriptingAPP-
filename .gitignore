@@ -1,0 +1,9 @@
+# dependencies / caches
+node_modules/
+*.log
+
+# macOS
+.DS_Store
+
+# Scripting scratch (never committed)
+_*.tsx
