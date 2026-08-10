@@ -370,14 +370,14 @@ function LargeWidget({ snapshot, logo, mapImage, privacy }: {
   return (
     <VStack
       alignment="leading"
-      spacing={6}
+      spacing={8}
       padding={12}
       frame={{ maxWidth: Infinity, maxHeight: Infinity, alignment: "topLeading" }}
       widgetURL={deepLink("overview")}
       widgetBackground={CARD_BG}
     >
       {/* 上半部分：信息 */}
-      <VStack alignment="leading" spacing={6} frame={{ maxWidth: Infinity, alignment: "topLeading" }}>
+      <VStack alignment="leading" spacing={8} frame={{ maxWidth: Infinity, alignment: "topLeading" }}>
         <HStack spacing={6}>
           <Text font="title3" fontWeight="bold" lineLimit={1} minScaleFactor={0.7}>
             {snapshot.identity.displayName}
@@ -430,17 +430,15 @@ function LargeWidget({ snapshot, logo, mapImage, privacy }: {
         </HStack>
       </VStack>
 
-      {/* 下半部分：地图（大图填充裁剪，超出部分隐藏） */}
-      <Spacer minLength={0} />
+      {/* 下半部分：地图（自适应剩余高度，填充裁剪，宽度由组件约束） */}
       {!privacy && mapImage ? (
         <Link url={deepLink("location")}>
-          <Image
-            image={mapImage}
-            resizable
-            scaleToFill
+          <ZStack
             frame={{ maxWidth: Infinity, maxHeight: Infinity }}
             clipShape={{ type: "rect", cornerRadius: 14 }}
-          />
+          >
+            <Image image={mapImage} resizable scaleToFill frame={{ maxWidth: Infinity, maxHeight: Infinity }} />
+          </ZStack>
         </Link>
       ) : (
         <Link url={deepLink("location")}>
