@@ -37,12 +37,16 @@ import { loadSettings, saveConnectedSnapshot, saveSettings, setRuntimeMode } fro
 
 const ACCENT = "#166DFF"
 
-declare function confirm(options: {
-  title?: string
-  message: string
-  cancelLabel?: string
-  confirmLabel?: string
-}): Promise<boolean>
+// 运行时只提供全局 Dialog 对象（prototype 上有 alert/confirm/prompt/actionSheet），
+// 并不存在全局 confirm 函数（类型声明有但运行时为 undefined）。
+declare const Dialog: {
+  confirm(options: {
+    title?: string
+    message: string
+    cancelLabel?: string
+    confirmLabel?: string
+  }): Promise<boolean>
+}
 
 type Operation = "idle" | "sendingSms" | "passwordLogin" | "smsLogin" | "switching"
 
@@ -136,7 +140,7 @@ export function ConnectionPage() {
   }
 
   const askConsent = async () => {
-    const accepted = await confirm({
+    const accepted = await Dialog.confirm({
       title: "临时 nonce 服务披露",
       message: `${nonceDisclosure.message}\n\n仅在你点击登录、发送短信或刷新时调用。是否同意临时使用？`,
       cancelLabel: "不同意",
@@ -213,7 +217,7 @@ export function ConnectionPage() {
   }
 
   const signOut = async () => {
-    const accepted = await confirm({
+    const accepted = await Dialog.confirm({
       title: "退出 BMW 会话？",
       message: "只删除本机 Keychain 会话；最后一次有效车况缓存会保留。",
       cancelLabel: "取消",
@@ -305,19 +309,9 @@ export function ConnectionPage() {
         <TextField title="手机号" prompt="86 开头，如 8613800138000" value={phone} onChanged={setPhone} />
       </Section>
 
-      <Section header={<Text font="headline">密码登录</Text>}>
-        <SecureField title="BMW 密码" prompt="输入密码" value={password} onChanged={setPassword} />
-        <Button
-          title={operation === "passwordLogin" ? "正在登录" : "使用密码连接"}
-          systemImage="key.fill"
-          disabled={!consented || busy || !phone || !password}
-          action={passwordLogin}
-        />
-      </Section>
-
       <Section
         header={<Text font="headline">短信登录</Text>}
-        footer={<Text font="caption">图形校验和短信挑战不会保存；页面关闭后需重新发送。</Text>}
+        footer={<Text font="caption">图形校验和短信挑战不会保存；页面关闭后需重新发送。若短信通道不可用，可改用下方密码登录。</Text>}
       >
         <Button
           title={operation === "sendingSms" ? "正在发送" : "发送短信验证码"}
@@ -336,6 +330,16 @@ export function ConnectionPage() {
             />
           </>
         ) : null}
+      </Section>
+
+      <Section header={<Text font="headline">密码登录</Text>}>
+        <SecureField title="BMW 密码" prompt="输入密码" value={password} onChanged={setPassword} />
+        <Button
+          title={operation === "passwordLogin" ? "正在登录" : "使用密码连接"}
+          systemImage="key.fill"
+          disabled={!consented || busy || !phone || !password}
+          action={passwordLogin}
+        />
       </Section>
 
       <Section header={<Text font="headline">会话管理</Text>}>

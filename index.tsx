@@ -143,7 +143,9 @@ function TireCard({ tirePosition, tire }: { tirePosition: string; tire?: TireSta
         {tire?.pressureBar != null ? `${tire.pressureBar.toFixed(1)} bar` : "—"}
       </Text>
       <Text font="caption2" foregroundStyle="tertiaryLabel">
-        {warning ? `建议 ${tire?.targetBar?.toFixed(1) ?? "—"}` : tire ? "正常" : "状态未知"}
+        {warning
+          ? (tire?.targetBar != null ? `建议 ${tire.targetBar.toFixed(1)} bar` : "胎压异常，请检查")
+          : tire ? "正常" : "状态未知"}
       </Text>
     </VStack>
   )
@@ -274,6 +276,8 @@ function StatusDetailsPage({ showClose = false }: { showClose?: boolean }) {
 
 function tireSummaryText(snapshot: VehicleSnapshot): string {
   const tires = snapshot.tires
+  // 汇总只看轮胎状态：状态已在数据层跟随官方 checkControlMessages（报低则标低）
+  // 并叠加 2.2 bar 敏感阈值，因此无需在此再读官方检查，避免与官方/宝马 APP 矛盾。
   if (!tires) return "暂无胎压数据"
   const all = [tires.frontLeft, tires.frontRight, tires.rearLeft, tires.rearRight]
   if (all.some(tire => tire?.status === "warning")) return "有轮胎气压异常"
@@ -483,7 +487,7 @@ function SettingsPage() {
         <HStack>
           <Text>版本</Text>
           <Spacer />
-          <Text foregroundStyle="secondaryLabel">0.1.1</Text>
+          <Text foregroundStyle="secondaryLabel">0.1.2</Text>
         </HStack>
         <HStack>
           <Text>作者</Text>

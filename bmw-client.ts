@@ -318,13 +318,28 @@ function finiteNumber(value: unknown): number | undefined {
   return Number.isFinite(number) ? number : undefined
 }
 
-function tire(value: any): TireState | undefined {
+// 比官方更敏感的偏低阈值：胎压低于该值（bar）时，即使 BMW 官方未报警也视为偏低
+const TIRE_LOW_PRESSURE_BAR = 2.2
+
+function tire(
+  value: any,
+  options?: { officialLow?: boolean },
+): TireState | undefined {
   const current = finiteNumber(value?.status?.currentPressure)
   const target = finiteNumber(value?.status?.targetPressure)
   if (current == null && target == null) return undefined
   const pressureBar = current == null ? undefined : current / 100
   const targetBar = target == null ? undefined : target / 100
-  const warning = current != null && target != null && current < target - 10
+  let warning = false
+  if (pressureBar != null && pressureBar < TIRE_LOW_PRESSURE_BAR) {
+    // 官方可能还未报警，但我们认为偏低
+    warning = true
+  } else if (current != null && target != null) {
+    warning = current < target - 10
+  } else if (options?.officialLow) {
+    // 官方 checkControlMessages 已报胎压过低 → 跟随官方
+    warning = true
+  }
   return { pressureBar, targetBar, status: warning ? "warning" : "normal" }
 }
 
@@ -422,13 +437,38 @@ function normalizeVehicle(vehicle: RawVehicle, state: Record<string, any>): Vehi
   const doors = state.doorsState ?? {}
   const windows = state.windowsState ?? {}
   const roof = state.roofState ?? {}
+  // BMW 接口的 checkControlMessages 多为 LOW/MEDIUM 级信息（宝马 App 并不提示），
+  // 只保留 HIGH/HIGHEST/CRITICAL 级别的真实告警，避免与 App 实际状态矛盾。
   const rawChecks = Array.isArray(state.checkControlMessages) ? state.checkControlMessages : []
-  const checks: VehicleCheck[] = rawChecks.slice(0, 20).map((item: any, index: number) => ({
+  const criticalChecks = rawChecks.filter(item =>
+    ["HIGH", "HIGHEST", "CRITICAL"].includes(String(item?.severity ?? "").trim().toUpperCase()))
+  const checks: VehicleCheck[] = criticalChecks.slice(0, 20).map((item: any, index: number) => ({
     id: String(item?.id ?? item?.type ?? `bmw-check-${index}`),
     severity: checkSeverity(item),
     title: checkTitle(item),
     detail: checkDetail(item),
   }))
+  // BMW 接口通常不把「油量低」作为 checkControlMessage 返回，本地按油量阈值补一条，
+  // 让「需要关注」如实反映油量过低（油车/混动且油量 < 10%）。
+  if (!electric && level != null && level < 10 &&
+      !checks.some(check => /FUEL|RANGE|油量|燃油|续航/.test(`${check.id}${check.title}`))) {
+    checks.push({
+      id: "FUEL_LEVEL_LOW",
+      severity: "warning",
+      title: "油量过低",
+      detail: `当前油量 ${Math.round(level)}%，建议尽快加油`,
+    })
+  }
+  // 胎压只跟随 HIGH 级以上官方检查（LOW 级是信息提示，宝马 App 不告警）
+  const pressureLow = criticalChecks.some(item =>
+    String(item?.type ?? item?.id ?? "").toUpperCase().includes("TIRE_PRESSURE"))
+  const tireRaw = state.tireState as Record<string, any> | undefined
+  const tires = tireRaw ? {
+    frontLeft: tire(tireRaw.frontLeft, { officialLow: pressureLow }),
+    frontRight: tire(tireRaw.frontRight, { officialLow: pressureLow }),
+    rearLeft: tire(tireRaw.rearLeft, { officialLow: pressureLow }),
+    rearRight: tire(tireRaw.rearRight, { officialLow: pressureLow }),
+  } : undefined
   const now = new Date().toISOString()
   const coordinates = state.location?.coordinates
   const latitude = finiteNumber(coordinates?.latitude)
@@ -471,12 +511,7 @@ function normalizeVehicle(vehicle: RawVehicle, state: Record<string, any>): Vehi
       hood: knownState(doors.hood),
       trunk: knownState(doors.trunk),
     },
-    tires: state.tireState ? {
-      frontLeft: tire(state.tireState.frontLeft),
-      frontRight: tire(state.tireState.frontRight),
-      rearLeft: tire(state.tireState.rearLeft),
-      rearRight: tire(state.tireState.rearRight),
-    } : undefined,
+    tires,
     charging: electric ? {
       state: electric.isChargerConnected ? "charging" : "disconnected",
       estimatedCompletionAt: typeof electric.chargingEndTime === "string" ? electric.chargingEndTime : undefined,
