@@ -295,9 +295,9 @@ export function ConnectionPage() {
 
       <Section
         header={<Text font="headline">BMW 账号</Text>}
-        footer={<Text font="caption">手机号需含国家区号：86 + 11 位手机号（如 8616605923510）。手机号只在提交请求时使用，不会持久化。</Text>}
+        footer={<Text font="caption">手机号需含国家区号：86 + 11 位手机号（如 8613800138000）。手机号只在提交请求时使用，不会持久化。</Text>}
       >
-        <TextField title="手机号" prompt="86 开头，如 8616605923510" value={phone} onChanged={setPhone} />
+        <TextField title="手机号" prompt="86 开头，如 8613800138000" value={phone} onChanged={setPhone} />
       </Section>
 
       <Section header={<Text font="headline">密码登录</Text>}>
