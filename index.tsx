@@ -29,6 +29,7 @@ import {
 } from "scripting"
 import { ConnectionPage } from "./connection-page"
 import { fetchFirstVehicleSnapshot, renewSession } from "./bmw-client"
+import { refreshMapSnapshot } from "./map-snapshot"
 import { loadSession, saveSession } from "./session-vault"
 import type { KnownState, TireState, VehicleSnapshot } from "./domain"
 import {
@@ -312,6 +313,17 @@ function LocationPage({ showClose = false }: { showClose?: boolean }) {
   const settings = loadSettings()
   const location = snapshot.location
   const privacy = settings.privacyMode
+
+  const updateWidgetMap = async () => {
+    if (!location) return
+    const ok = await refreshMapSnapshot(location.latitude, location.longitude)
+    void Dialog?.alert?.({
+      title: ok ? "已更新" : "更新失败",
+      message: ok ? "停车位置地图已更新，桌面大号组件将显示。" : "地图生成失败，请稍后重试。",
+      buttonLabel: "好",
+    })
+  }
+
   if (!location) {
     return (
       <VStack navigationTitle="停车位置" spacing={12} padding={24}>
@@ -325,8 +337,8 @@ function LocationPage({ showClose = false }: { showClose?: boolean }) {
     <ScrollView
       navigationTitle="停车位置"
       navigationBarTitleDisplayMode="inline"
-      toolbar={showClose ? {
-        topBarLeading: [
+      toolbar={{
+        topBarLeading: showClose ? [
           <Button
             title="关闭"
             systemImage="xmark.circle.fill"
@@ -335,8 +347,17 @@ function LocationPage({ showClose = false }: { showClose?: boolean }) {
             foregroundStyle={ACCENT}
             accessibilityLabel="关闭 BMW Companion"
           />,
+        ] : undefined,
+        topBarTrailing: [
+          <Button
+            title="更新组件地图"
+            systemImage="arrow.triangle.2.circlepath"
+            action={() => void updateWidgetMap()}
+            fontWeight="semibold"
+            foregroundStyle={ACCENT}
+          />,
         ],
-      } : undefined}
+      }}
     >
       <VStack spacing={14} padding={16}>
         {privacy ? (
@@ -353,7 +374,7 @@ function LocationPage({ showClose = false }: { showClose?: boolean }) {
           <Map
             initialCameraPosition={MapCameraPosition.region({
               center: { latitude: location.latitude, longitude: location.longitude },
-              span: { latitudeDelta: 0.025, longitudeDelta: 0.025 },
+              span: { latitudeDelta: 0.002, longitudeDelta: 0.002 },
             })}
             mapStyle={{ style: "standard", showsTraffic: true }}
             frame={{ maxWidth: Infinity, height: 270 }}
@@ -462,7 +483,7 @@ function SettingsPage() {
         <HStack>
           <Text>版本</Text>
           <Spacer />
-          <Text foregroundStyle="secondaryLabel">0.1.0</Text>
+          <Text foregroundStyle="secondaryLabel">0.1.1</Text>
         </HStack>
         <HStack>
           <Text>作者</Text>
@@ -550,6 +571,10 @@ function DashboardPage() {
       setSnapshot(next)
       setRefreshStatus("BMW 车况已更新")
       Widget.reloadAll()
+      // 自动生成停车位置地图快照（离屏渲染），供桌面大号组件使用
+      if (next.location) {
+        void refreshMapSnapshot(next.location.latitude, next.location.longitude)
+      }
     } catch (error) {
       const code = error instanceof Error ? error.message : String(error)
       setRefreshStatus(`刷新失败，继续显示上次数据：${code.slice(0, 100)}`)
