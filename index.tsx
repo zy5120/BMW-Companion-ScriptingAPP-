@@ -576,6 +576,12 @@ function DashboardPage() {
   const previewDestination = useMemo(() => <WidgetPreviewPage />, [])
   const settingsDestination = useMemo(() => <SettingsPage />, [])
 
+  // 从设置/连接页返回时（登录成功或切换车辆后），自动重载最新快照
+  const reloadFromStorage = () => {
+    const next = loadSnapshot()
+    setSnapshot(next)
+  }
+
   const refresh = async () => {
     if (refreshing) return
     const session = loadSession()
@@ -616,6 +622,7 @@ function DashboardPage() {
     <ScrollView
       navigationTitle="车况"
       navigationBarTitleDisplayMode="large"
+      onAppear={reloadFromStorage}
       toolbar={{
         topBarLeading: [
           <Button
