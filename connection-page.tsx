@@ -32,6 +32,7 @@ import {
   revokeNonceConsent,
 } from "./nonce-provider"
 import { loadSession, removeSession, saveSession } from "./session-vault"
+import { refreshMapSnapshot } from "./map-snapshot"
 import { loadSettings, saveConnectedSnapshot, saveSettings, setRuntimeMode } from "./storage"
 
 const ACCENT = "#166DFF"
@@ -157,6 +158,10 @@ export function ConnectionPage() {
     Widget.reloadAll()
     setStatus(`连接成功：${snapshot.identity.displayName}`)
     void reloadVehicles()
+    // 登录成功后自动生成停车位置地图快照，供桌面大号组件使用
+    if (snapshot.location) {
+      void refreshMapSnapshot(snapshot.location.latitude, snapshot.location.longitude)
+    }
   }
 
   const passwordLogin = async () => {
