@@ -1,7 +1,7 @@
 import { fetch } from "scripting"
 import JSEncrypt from "./vendor/jsencrypt"
 import type { KnownState, LockState, TireState, VehicleCheck, VehicleSnapshot } from "./domain"
-import { BMW_HEADERS, BMW_HOST, COMPAT_HEADERS_X } from "./compat-config"
+import { BMW_HEADERS, BMW_HOST, brandUserAgent, COMPAT_HEADERS_X } from "./compat-config"
 import { requestCompatNonce } from "./nonce-provider"
 import { makeSession, type BMWSessionSecrets } from "./session-vault"
 
@@ -536,6 +536,7 @@ async function fetchConsumption(
   session: BMWSessionSecrets,
   vin: string,
   fuelType: "fuel" | "electric" | "hybrid" | "unknown",
+  brand: "BMW" | "MINI" = "BMW",
 ): Promise<ConsumptionInfo | undefined> {
   try {
     const response = await requestJSON<unknown>("/eadrax-suscs/v1/vehicles/sustainability", {
@@ -544,6 +545,7 @@ async function fetchConsumption(
         authorization: `Bearer ${session.accessToken}`,
         "bmw-vin": vin,
         "x-gcid": session.gcid,
+        "x-user-agent": brandUserAgent(brand),
       },
     })
     const result = response as {
@@ -594,31 +596,57 @@ async function fetchConsumption(
 
 export interface VehicleListItem {
   vin: string
-  brand: string
+  brand: "BMW" | "MINI"
   model: string
   licensePlate?: string
 }
 
-export async function fetchVehicleList(session: BMWSessionSecrets): Promise<VehicleListItem[]> {
+// 同时拉取宝马和 MINI 的车辆条目（x-user-agent 品牌标识决定接口返回哪个品牌）
+async function fetchVehicleEntries(
+  session: BMWSessionSecrets,
+  brand: "BMW" | "MINI",
+): Promise<Array<{ vin: string; brand: "BMW" | "MINI"; vehicle: RawVehicle }>> {
   const vehicles = await requestJSON<{ mappingInfos?: Array<{ vin?: unknown; cnData?: RawVehicle }> }>(
     "/eadrax-vcs/v5/vehicle-list?",
     {
       method: "POST",
-      headers: { authorization: `Bearer ${session.accessToken}` },
+      headers: {
+        authorization: `Bearer ${session.accessToken}`,
+        "x-user-agent": brandUserAgent(brand),
+      },
       body: "{}",
     },
   )
-  const items: VehicleListItem[] = []
+  const entries: Array<{ vin: string; brand: "BMW" | "MINI"; vehicle: RawVehicle }> = []
   for (const entry of vehicles.mappingInfos ?? []) {
     const cn = entry.cnData ?? (entry as RawVehicle | undefined)
     const vin = typeof entry?.vin === "string" ? entry.vin : typeof cn?.vin === "string" ? cn.vin : ""
     if (!vin) continue
-    items.push({
+    entries.push({
       vin,
-      brand: typeof cn?.brand === "string" ? cn.brand : "BMW",
-      model: typeof cn?.model === "string" ? cn.model : "",
-      licensePlate: typeof cn?.licensePlate === "string" ? cn.licensePlate : undefined,
+      brand,
+      vehicle: cn ? { ...cn, vin } : ({ ...(entry as RawVehicle), vin } as RawVehicle),
     })
+  }
+  return entries
+}
+
+export async function fetchVehicleList(session: BMWSessionSecrets): Promise<VehicleListItem[]> {
+  const items: VehicleListItem[] = []
+  const seen = new Set<string>()
+  for (const brand of ["BMW", "MINI"] as const) {
+    const entries = await fetchVehicleEntries(session, brand)
+    for (const entry of entries) {
+      const upper = entry.vin.toUpperCase()
+      if (seen.has(upper)) continue
+      seen.add(upper)
+      items.push({
+        vin: entry.vin,
+        brand: entry.brand,
+        model: typeof entry.vehicle.model === "string" ? entry.vehicle.model : "",
+        licensePlate: typeof entry.vehicle.licensePlate === "string" ? entry.vehicle.licensePlate : undefined,
+      })
+    }
   }
   return items
 }
@@ -627,36 +655,28 @@ export async function fetchFirstVehicleSnapshot(
   session: BMWSessionSecrets,
   targetVin?: string,
 ): Promise<VehicleSnapshot> {
-  const vehicles = await requestJSON<{ mappingInfos?: Array<{ vin?: unknown; cnData?: RawVehicle }> }>(
-    "/eadrax-vcs/v5/vehicle-list?",
-    {
-      method: "POST",
-      headers: { authorization: `Bearer ${session.accessToken}` },
-      body: "{}",
-    },
-  )
-  const entries = (vehicles.mappingInfos ?? []) as Array<{ vin?: unknown; cnData?: RawVehicle }>
-  let entry = entries[0]
-  if (targetVin && entries.length > 0) {
-    const matched = entries.find(candidate => {
-      const candidateVin =
-        typeof candidate?.vin === "string" ? candidate.vin :
-        typeof candidate?.cnData?.vin === "string" ? candidate.cnData.vin : ""
-      return candidateVin.toUpperCase() === targetVin.toUpperCase()
-    })
-    if (matched) entry = matched
+  const allEntries: Array<{ vin: string; brand: "BMW" | "MINI"; vehicle: RawVehicle }> = []
+  for (const brand of ["BMW", "MINI"] as const) {
+    allEntries.push(...(await fetchVehicleEntries(session, brand)))
   }
-  const vehicle = entry?.cnData ?? (entry as RawVehicle | undefined)
-  const vin = typeof entry?.vin === "string" ? entry.vin : typeof vehicle?.vin === "string" ? vehicle.vin : ""
-  if (!vehicle || !vin) throw new Error("VEHICLE_LIST_EMPTY")
-  vehicle.vin = vin
+  let selected = allEntries[0]
+  if (targetVin && allEntries.length > 0) {
+    const matched = allEntries.find(candidate => candidate.vin.toUpperCase() === targetVin.toUpperCase())
+    if (matched) selected = matched
+  }
+  if (!selected) throw new Error("VEHICLE_LIST_EMPTY")
+  const { vin, brand, vehicle } = selected
   const stateResponse = await requestJSON<{ state?: Record<string, any> }>("/eadrax-vcs/v4/vehicles/state", {
     method: "GET",
-    headers: { authorization: `Bearer ${session.accessToken}`, "bmw-vin": vin },
+    headers: {
+      authorization: `Bearer ${session.accessToken}`,
+      "bmw-vin": vin,
+      "x-user-agent": brandUserAgent(brand),
+    },
   })
   if (!stateResponse.state || typeof stateResponse.state !== "object") throw new Error("VEHICLE_STATE_INVALID")
   const snapshot = normalizeVehicle(vehicle, stateResponse.state)
-  const consumption = await fetchConsumption(session, vin, snapshot.energy.type)
+  const consumption = await fetchConsumption(session, vin, snapshot.energy.type, brand)
   if (consumption) {
     snapshot.energy.consumption = consumption.value
     snapshot.energy.consumptionUnit = consumption.unit
