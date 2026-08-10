@@ -1,8 +1,10 @@
 import { Widget } from "scripting"
+import { scriptKeyNamespace } from "./storage"
 
-// 桌面大号组件使用的地图快照路径（App Group 共享目录，组件可读）
+// 桌面大号组件使用的地图快照路径（App Group 共享目录，组件可读）；
+// 文件名带脚本命名空间，多脚本各自使用自己的地图文件。
 export function mapSnapshotPath(): string {
-  return `${FileManager.appGroupDocumentsDirectory}/car-location-map.png`
+  return `${FileManager.appGroupDocumentsDirectory}/car-location-map-${scriptKeyNamespace()}.png`
 }
 
 // 用 MapKit 离屏渲染一张 Apple 原生地图（带车辆标注），保存为 PNG。
