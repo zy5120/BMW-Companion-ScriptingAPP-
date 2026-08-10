@@ -7,17 +7,17 @@ export function mapSnapshotPath(): string {
 
 // 用 MapKit 离屏渲染一张 Apple 原生地图（带车辆标注），保存为 PNG。
 // 刷新车况后自动调用，无需任何界面操作；大号组件读取该图片显示。
-// 尺寸取大（1280×720），组件内按填充+裁剪显示，高分辨率设备上也不会显小。
+// 官方推荐：快照尺寸 = 组件显示尺寸（305×220 pt），scaleToFit 一比一显示，跨设备一致。
 export async function refreshMapSnapshot(
   latitude: number,
   longitude: number,
-  size = { width: 1280, height: 720 },
+  size = { width: 620, height: 440 },
 ): Promise<boolean> {
   try {
     const snap = await MapSnapshotter.take({
       region: {
         center: { latitude, longitude },
-        span: { latitudeDelta: 0.002, longitudeDelta: 0.002 },
+        span: { latitudeDelta: 0.0008, longitudeDelta: 0.0008 },
       },
       size,
       mapStyle: { style: "standard", showsTraffic: false },
