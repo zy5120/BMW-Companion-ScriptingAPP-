@@ -18,7 +18,6 @@ export interface NonceConsentRecord {
 }
 
 export const NONCE_CONSENT_KEY = "bmw.companion.v2.nonceConsent.meidaisan-v5-compat"
-const SHARED = { shared: true }
 
 export const nonceDisclosure = {
   providerId: "meidaisan-v5-compat" as const,
@@ -30,7 +29,7 @@ export const nonceDisclosure = {
 }
 
 export function loadNonceConsent(): NonceConsentRecord | null {
-  const value = Storage.get<NonceConsentRecord>(NONCE_CONSENT_KEY, SHARED)
+  const value = Storage.get<NonceConsentRecord>(NONCE_CONSENT_KEY)
   if (!value ||
       value.schemaVersion !== 1 ||
       value.providerId !== nonceDisclosure.providerId ||
@@ -48,12 +47,12 @@ export function grantNonceConsent(): NonceConsentRecord {
     acceptedHost: nonceDisclosure.host,
     dataClasses: ["mobile", "gcid", "client-version", "ip-and-request-metadata"],
   }
-  Storage.set(NONCE_CONSENT_KEY, record, SHARED)
+  Storage.set(NONCE_CONSENT_KEY, record)
   return record
 }
 
 export function revokeNonceConsent(): void {
-  Storage.remove(NONCE_CONSENT_KEY, SHARED)
+  Storage.remove(NONCE_CONSENT_KEY)
 }
 
 export async function requestCompatNonce(
