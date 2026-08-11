@@ -11,17 +11,21 @@ import {
   ZStack,
 } from "scripting"
 import type { VehicleSnapshot } from "./domain"
-import { renewSession } from "./bmw-client"
+import { fetchFirstVehicleSnapshot, renewSession } from "./bmw-client"
 import { BMW_HEADERS, BMW_HOST, brandUserAgent } from "./compat-config"
 import { formatSyncTime } from "./formatters"
+import { refreshMapSnapshot } from "./map-snapshot"
 import { loadSession, saveSession } from "./session-vault"
 import {
   getFreshness,
+  loadRuntimeMode,
   loadSettings,
   loadWidgetSnapshot,
   parseWidgetParameter,
   resolvePrivacy,
+  saveConnectedSnapshot,
   scriptKeyNamespace,
+  setRuntimeMode,
 } from "./storage"
 
 const ACCENT = "#166DFF"
@@ -490,8 +494,39 @@ async function loadLogo(): Promise<UIImage | null> {
   }
 }
 
+// 组件自动刷新：保存的快照超过 30 分钟 → 向 BMW 拉取最新车况（会话在 Keychain、nonce 同意在共享域，组件可访问）；
+// 任何失败（离线/会话失效/接口错误）都回退到已有快照，保证组件永远有内容可显示。
+async function refreshWidgetSnapshotIfStale(snapshot: VehicleSnapshot): Promise<VehicleSnapshot> {
+  if (snapshot.source === "network") {
+    const age = Date.now() - Date.parse(snapshot.cachedAt)
+    if (Number.isFinite(age) && age < 30 * 60 * 1000) return snapshot
+  }
+  try {
+    const session = loadSession()
+    if (!session) return snapshot
+    let usable = session
+    if (Date.parse(session.accessTokenExpiresAt) <= Date.now() + 60_000) {
+      usable = await renewSession(session)
+      saveSession(usable)
+    }
+    const next = await fetchFirstVehicleSnapshot(usable, loadSettings().selectedVin || undefined)
+    saveConnectedSnapshot(next)
+    setRuntimeMode("connected")
+    if (next.location) {
+      void refreshMapSnapshot(next.location.latitude, next.location.longitude)
+    }
+    return next
+  } catch {
+    return snapshot
+  }
+}
+
 async function main() {
-  const snapshot = loadWidgetSnapshot()
+  let snapshot = loadWidgetSnapshot()
+  // 组件每 30 分钟刷新一次：快照过旧时自动拉新数据（失败则沿用旧数据）
+  if (loadRuntimeMode() === "connected") {
+    snapshot = await refreshWidgetSnapshotIfStale(snapshot)
+  }
   const parameter = parseWidgetParameter(Widget.parameter)
   const privacy = resolvePrivacy(parameter, loadSettings())
   const family = Widget.family
