@@ -1,28 +1,28 @@
 {
-  "localizedNames" : {
-    "zh-Hans" : "BMW Companion"
-  },
-  "name" : "BMW Companion",
-  "author" : {
-    "email" : null,
-    "homepage" : null,
-    "name" : "厦门硬骨头"
-  },
-  "permissions" : null,
-  "iconImage" : null,
+  "runInApp" : false,
+  "version" : "0.1.7",
   "localizedDescriptions" : {
     "zh-Hans" : "隐私披露下的 BMW 只读车况临时兼容版"
   },
-  "color" : "#166DFF",
-  "version" : "0.1.6",
-  "entry" : "index.tsx",
-  "icon" : "car.side.fill",
+  "name" : "BMW Companion",
+  "description" : "A privacy-first native BMW vehicle status companion for Scripting.",
+  "author" : {
+    "name" : "厦门硬骨头",
+    "homepage" : null,
+    "email" : null
+  },
   "intentInputTypes" : [
     "texts"
   ],
-  "description" : "A privacy-first native BMW vehicle status companion for Scripting.",
-  "runInApp" : false,
   "contributors" : [
 
-  ]
+  ],
+  "icon" : "car.side.fill",
+  "localizedNames" : {
+    "zh-Hans" : "BMW Companion"
+  },
+  "permissions" : null,
+  "iconImage" : null,
+  "entry" : "index.tsx",
+  "color" : "#166DFF"
 }
