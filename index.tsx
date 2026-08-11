@@ -8,6 +8,7 @@ import {
   HStack,
   Image,
   LazyVGrid,
+  Link,
   List,
   Map,
   Marker,
@@ -531,13 +532,21 @@ function SettingsPage() {
         <HStack>
           <Text>版本</Text>
           <Spacer />
-          <Text foregroundStyle="secondaryLabel">0.1.7</Text>
+          <Text foregroundStyle="secondaryLabel">0.1.8</Text>
         </HStack>
         <HStack>
           <Text>作者</Text>
           <Spacer />
           <Text foregroundStyle="secondaryLabel">@厦门硬骨头</Text>
         </HStack>
+        <Link url="https://qun.qq.com/universal-share/share?ac=1&authKey=CKOUbxyi8UYm3oz8sboNeezGyBAkKpYn5ihduL3MqPz%2F8jdz9iEIji02uv5fcsgP&busi_data=eyJncm91cENvZGUiOiI4MTI0MzMyOSIsInRva2VuIjoiNjlmWWZlTGJ6UnR3NHZReUNPZExjSUp2WXZPWkpaeWZEVEdTR1FsS3dLQVkxbk92bU1MVFdFYmFHU2c2TkczbiIsInVpbiI6IjQ5MzIxNDg3MiJ9&data=9bDeOii4T7L0nrjay-6OAnsSeus0sY63xcxLurytdiwqa3oDhSi5zR6v5vkqYUVEqFfQ9c4RZVhT8IfGwZbzNA&svctype=4&tempid=h5_group_info">
+          <HStack>
+            <Text>点我进群</Text>
+            <Spacer />
+            <Text foregroundStyle="secondaryLabel">QQ群：81243329</Text>
+            <Image systemName="arrow.up.right" font={12} foregroundStyle="secondaryLabel" />
+          </HStack>
+        </Link>
       </Section>
     </List>
   )
