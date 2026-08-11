@@ -531,7 +531,7 @@ function SettingsPage() {
         <HStack>
           <Text>版本</Text>
           <Spacer />
-          <Text foregroundStyle="secondaryLabel">0.1.6</Text>
+          <Text foregroundStyle="secondaryLabel">0.1.7</Text>
         </HStack>
         <HStack>
           <Text>作者</Text>
