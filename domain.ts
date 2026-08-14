@@ -28,6 +28,7 @@ export interface VehicleSnapshot {
     brand?: string
     model?: string
     plateMasked?: string
+    plate?: string
   }
   energy: {
     type: EnergyType
@@ -77,6 +78,9 @@ export interface CompanionSettings {
   staleHours: number
   defaultVehicleId: string
   selectedVin?: string
+  // 无胎压数据时的占位文案（部分车型不返回胎压，组件空出两行时显示）
+  noTiresLine1?: string
+  noTiresLine2?: string
 }
 
 export interface WidgetParameter {
