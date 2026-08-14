@@ -30,8 +30,16 @@ if (wantsJSON) {
   const alertText = snapshot.checks.length
     ? `需要关注：${snapshot.checks.map(check => check.title).join("、")}。`
     : "没有需要关注的项目。"
+  const energyPart =
+    snapshot.energy.type === "electric"
+      ? `${snapshot.energy.levelPercent ?? "未知"}% 电量`
+      : snapshot.energy.type === "hybrid"
+        ? `${snapshot.energy.levelPercent ?? "未知"}% 电量${snapshot.energy.remainingLiters != null ? `、${Math.round(snapshot.energy.remainingLiters)}L 油量` : ""}`
+        : snapshot.energy.remainingLiters != null
+          ? `${Math.round(snapshot.energy.remainingLiters)}L 油量`
+          : "能源信息未知"
   Script.exit(Intent.text(
-    `${snapshot.identity.displayName}，${snapshot.energy.levelPercent ?? "未知"}% 电量，` +
+    `${snapshot.identity.displayName}，${energyPart}，` +
     `${snapshot.energy.rangeKm ?? "未知"} 公里预计续航，${lockLabel(snapshot.access.lock)}，` +
     `${safety.text}。${alertText}${freshnessLabel(getFreshness(snapshot))}。`,
   ))
