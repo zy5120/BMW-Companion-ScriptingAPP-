@@ -124,11 +124,11 @@ function LogoView({ logo, size = 20 }: { logo: UIImage | null; size?: number }) 
   return <Image systemName="car.2.fill" font={size - 6} foregroundStyle={ACCENT} />
 }
 
-function CarView({ car }: { car: UIImage | null }) {
+function CarView({ car, maxHeight = 108 }: { car: UIImage | null; maxHeight?: number }) {
   return (
-    <ZStack frame={{ maxWidth: Infinity, maxHeight: 108 }}>
+    <ZStack frame={{ maxWidth: Infinity, maxHeight }}>
       {car ? (
-        <Image image={car} resizable scaleToFit frame={{ maxWidth: Infinity, maxHeight: 108 }} />
+        <Image image={car} resizable scaleToFit frame={{ maxWidth: Infinity, maxHeight }} />
       ) : (
         <Image systemName="car.side.fill" font={46} foregroundStyle={ACCENT} />
       )}
@@ -206,6 +206,8 @@ function SmallWidget({ snapshot, car }: { snapshot: VehicleSnapshot; car: UIImag
   const lockColor = info.unknown ? "#8E8E93" : info.locked ? "#30D158" : "#FF453A"
   const lockIcon = info.locked ? "lock.shield.fill" : "xmark.shield.fill"
   const model = snapshot.identity.model ?? snapshot.identity.displayName
+  const rangeText = snapshot.energy.rangeKm != null ? `${snapshot.energy.rangeKm}km` : "—km"
+  const fuelText = snapshot.energy.remainingLiters != null ? `${Math.round(snapshot.energy.remainingLiters)}L` : "—"
   return (
     <VStack
       alignment="leading"
@@ -217,17 +219,17 @@ function SmallWidget({ snapshot, car }: { snapshot: VehicleSnapshot; car: UIImag
     >
       {/* 第一行：车型 + 右上角锁状态 */}
       <HStack spacing={6}>
-        <Text font="subheadline" fontWeight="bold" lineLimit={1} minScaleFactor={0.7}>
+        <Text font="title3" fontWeight="bold" lineLimit={1} minScaleFactor={0.7}>
           {model}
         </Text>
         <Spacer minLength={0} />
         <Image systemName={lockIcon} font={14} foregroundStyle={lockColor as any} />
       </HStack>
-      {/* 副标题：当前燃油量 */}
+      {/* 副标题：剩余里程/油量，如 500km/35L */}
       <HStack spacing={4}>
         <Image systemName="fuelpump.fill" font={9} foregroundStyle={ACCENT} />
         <Text font="caption" foregroundStyle="secondaryLabel" lineLimit={1} minScaleFactor={0.8}>
-          {fuelLevelText(snapshot)}
+          {`${rangeText}/${fuelText}`}
         </Text>
       </HStack>
       {/* 车辆图片（占据中间剩余空间） */}
@@ -255,69 +257,137 @@ function MediumRow({ icon, label, value }: { icon: string; label: string; value:
   )
 }
 
-function MediumWidget({ snapshot, car, privacy }: {
+// 车况行：图标靠左、数值靠右（无文字标签，图标即可示意）
+function StatCard({ icon, value, tone }: { icon: string; value: string; tone?: string }) {
+  return (
+    <HStack spacing={3} frame={{ maxWidth: Infinity, alignment: "leading" }}>
+      <Image systemName={icon} font={9} foregroundStyle={ACCENT} frame={{ width: 13 }} />
+      <Spacer minLength={0} />
+      <Text font={10} fontWeight="semibold" lineLimit={1} minScaleFactor={0.6} foregroundStyle={(tone ?? "label") as any}>{value}</Text>
+    </HStack>
+  )
+}
+
+// 状态胶囊：绿=正常 / 橙=异常
+function StatusPill({ safe, text }: { safe: boolean; text: string }) {
+  const color = safe ? "#30D158" : "#FF9F0A"
+  const icon = safe ? "checkmark.shield.fill" : "exclamationmark.triangle.fill"
+  return (
+    <HStack spacing={3} padding={{ horizontal: 7, vertical: 3 }} background={`${color}1A` as any} clipShape={{ type: "capsule", style: "continuous" }}>
+      <Image systemName={icon} font={9} foregroundStyle={color as any} />
+      <Text font={9} fontWeight="semibold" foregroundStyle={color as any} lineLimit={1}>{text}</Text>
+    </HStack>
+  )
+}
+
+// 中号与大号共用：头部 + 左信息 + 右车图。fill=true 时填满可用高度（中号），false 时紧凑（大号顶部）。
+function StatusBoard({ snapshot, logo, car, privacy, fill }: {
   snapshot: VehicleSnapshot
+  logo: UIImage | null
   car: UIImage | null
   privacy: boolean
+  fill: boolean
 }) {
   const dw = doorWindowStatus(snapshot)
+  const isAllGood = dw.safe && snapshot.checks.length === 0
+  const settings = loadSettings()
+  const h = fill ? { maxHeight: Infinity } : {}
   return (
-    <HStack
-      spacing={14}
-      padding={14}
-      frame={{ maxWidth: Infinity, maxHeight: Infinity, alignment: "leading" }}
-      widgetURL={deepLink("overview")}
-      widgetBackground={CARD_BG}
-    >
-      {/* 左半边（60%）：全部车况参数，两列网格排布；填满高度，末两行压到底部与右侧状态对齐 */}
-      <VStack alignment="leading" spacing={4} frame={{ width: 172, maxHeight: Infinity, alignment: "topLeading" }}>
+    <VStack spacing={8} frame={{ maxWidth: Infinity, alignment: "topLeading" }}>
+      {/* 头部：车型 + 车牌 + logo（整行） */}
+      <HStack spacing={6} frame={{ maxWidth: Infinity, alignment: "leading" }}>
         <Text font="title3" fontWeight="bold" lineLimit={1} minScaleFactor={0.6}>
           {snapshot.identity.displayName}
         </Text>
-        {/* 两列：里程 | 续航 */}
-        <HStack spacing={10} frame={{ maxWidth: Infinity, alignment: "leading" }}>
-          <MediumRow icon="gauge.with.dots.needle.67percent" label="里程" value={snapshot.mileageKm != null ? `${snapshot.mileageKm.toLocaleString()}㎞` : "—"} />
-          <MediumRow icon="map" label="续航" value={snapshot.energy.rangeKm != null ? `${snapshot.energy.rangeKm}㎞` : "—㎞"} />
-        </HStack>
-        {/* 两列：油量 | 油耗 */}
-        <HStack spacing={10} frame={{ maxWidth: Infinity, alignment: "leading" }}>
-          <MediumRow icon="fuelpump.fill" label="油量" value={fuelLevelText(snapshot)} />
-          <MediumRow icon="flame.fill" label="油耗" value={snapshot.energy.consumption != null ? `${snapshot.energy.consumption} L` : "—"} />
-        </HStack>
-        {/* 胎压 2×2：左前|右前 / 左后|右后 */}
-        {snapshot.tires ? (
-          <VStack alignment="leading" spacing={4} frame={{ maxWidth: Infinity, alignment: "leading" }}>
-            <HStack spacing={10} frame={{ maxWidth: Infinity, alignment: "leading" }}>
-              <TirePair label="左前" tire={snapshot.tires?.frontLeft} />
-              <TirePair label="右前" tire={snapshot.tires?.frontRight} />
-            </HStack>
-            <HStack spacing={10} frame={{ maxWidth: Infinity, alignment: "leading" }}>
-              <TirePair label="左后" tire={snapshot.tires?.rearLeft} />
-              <TirePair label="右后" tire={snapshot.tires?.rearRight} />
-            </HStack>
-          </VStack>
+        <Spacer minLength={0} />
+        {snapshot.identity.plate || snapshot.identity.plateMasked ? (
+          <Text font={8} foregroundStyle="secondaryLabel" lineLimit={1} minScaleFactor={0.6}>{snapshot.identity.plate ?? snapshot.identity.plateMasked ?? ""}</Text>
         ) : null}
-        {/* 弹性空隙：把下方行压到组件底部，与右侧状态标签同一行 */}
-        <Spacer minLength={0} />
-        {/* 更新时间 */}
-        <MediumRow icon="clock.fill" label="更新" value={formatSyncTime(snapshot.vehicleObservedAt)} />
-        {/* 车辆定位信息 */}
-        <MediumRow icon="location.fill" label="位置" value={privacy ? "位置已隐藏" : (snapshot.location?.address ?? "位置不可用")} />
-      </VStack>
-      {/* 右半边（40%）：车辆配图 + 右下角门窗/天窗状态；内容底部对齐 */}
-      <VStack alignment="center" spacing={4} frame={{ width: 115, maxHeight: Infinity, alignment: "bottom" }}>
-        <Spacer minLength={0} />
-        <CarView car={car} />
-        <HStack spacing={3}>
-          <Image
-            systemName={dw.safe ? "checkmark.shield.fill" : "exclamationmark.triangle.fill"}
-            font={9}
-            foregroundStyle={(dw.safe ? "#30D158" : "#FF9F0A") as any}
-          />
-          <Text font={9} foregroundStyle="secondaryLabel" lineLimit={1}>{dw.text}</Text>
-        </HStack>
-      </VStack>
-    </HStack>
+        <LogoView logo={logo} size={16} />
+      </HStack>
+
+      {/* 主体：左信息 + 右车图 */}
+      <HStack spacing={12} frame={{ maxWidth: Infinity, alignment: "leading", ...h }}>
+        {/* 左列：车况 + 胎压 + 定位 + 刷新时间 */}
+        <VStack alignment="leading" spacing={6} frame={{ width: 138, alignment: "topLeading", ...h }}>
+          {/* 第一行：总里程 | 油耗 */}
+          <HStack spacing={8} frame={{ maxWidth: Infinity, alignment: "leading" }}>
+            <StatCard icon="gauge.with.dots.needle.67percent" value={snapshot.mileageKm != null ? `${snapshot.mileageKm.toLocaleString()}㎞` : "—"} />
+            <StatCard icon="flame.fill" value={consumptionText(snapshot)} />
+          </HStack>
+          {/* 第二行：续航 | 油量 */}
+          <HStack spacing={8} frame={{ maxWidth: Infinity, alignment: "leading" }}>
+            <StatCard icon="map" value={snapshot.energy.rangeKm != null ? `${snapshot.energy.rangeKm}㎞` : "—㎞"} />
+            <StatCard icon="fuelpump.fill" value={snapshot.energy.remainingLiters != null ? `${Math.round(snapshot.energy.remainingLiters)}L` : "—"} />
+          </HStack>
+          {/* 第三、四行：胎压 2×2（左上=左前 / 右上=右前 / 左下=左后 / 右下=右后） */}
+          {snapshot.tires ? (
+            <HStack spacing={8} frame={{ maxWidth: Infinity, alignment: "leading" }}>
+              <VStack alignment="leading" spacing={3} frame={{ maxWidth: Infinity, alignment: "leading" }}>
+                <TirePair label="左前" tire={snapshot.tires?.frontLeft} />
+                <TirePair label="左后" tire={snapshot.tires?.rearLeft} />
+              </VStack>
+              <VStack alignment="leading" spacing={3} frame={{ maxWidth: Infinity, alignment: "leading" }}>
+                <TirePair label="右前" tire={snapshot.tires?.frontRight} />
+                <TirePair label="右后" tire={snapshot.tires?.rearRight} />
+              </VStack>
+            </HStack>
+          ) : (settings.noTiresLine1 || settings.noTiresLine2) ? (
+            <VStack alignment="leading" spacing={2}>
+              {settings.noTiresLine1 ? <Text font={9} foregroundStyle="secondaryLabel" lineLimit={1}>{settings.noTiresLine1}</Text> : null}
+              {settings.noTiresLine2 ? <Text font={9} foregroundStyle="secondaryLabel" lineLimit={1}>{settings.noTiresLine2}</Text> : null}
+            </VStack>
+          ) : null}
+          {/* 第五行：定位 */}
+          <HStack spacing={3} frame={{ maxWidth: Infinity, alignment: "leading" }}>
+            <Image systemName="location.fill" font={9} foregroundStyle="secondaryLabel" />
+            <Text font={9} foregroundStyle="secondaryLabel" lineLimit={2} frame={{ maxWidth: Infinity, alignment: "leading" }}>{privacy ? "位置已隐藏" : (snapshot.location?.address ?? "位置不可用")}</Text>
+          </HStack>
+          {/* 弹性空隙：仅 fill（中号）时把最后一行压到底部；大号（紧凑）不需要 */}
+          {fill ? <Spacer minLength={0} /> : null}
+          {/* 第六行：刷新时间 + 锁车状态 */}
+          <HStack spacing={3} frame={{ maxWidth: Infinity, alignment: "leading" }}>
+            <Image systemName="clock.fill" font={9} foregroundStyle="secondaryLabel" />
+            <Text font={9} foregroundStyle="secondaryLabel">{formatSyncTime(snapshot.fetchedAt)}</Text>
+            <Spacer minLength={0} />
+            <LockBadge snapshot={snapshot} />
+          </HStack>
+        </VStack>
+
+        {/* 右列：车辆图 + ALL GOOD 水印（全正常时）+ 状态胶囊（异常时） */}
+        <ZStack frame={{ maxWidth: Infinity, ...h }} padding={{ leading: 5 }}>
+          {isAllGood ? (
+            <Text font="title2" fontWeight="bold" lineLimit={2} frame={{ maxWidth: Infinity, maxHeight: Infinity, alignment: "topLeading" }}>{"ALL\nGOOD"}</Text>
+          ) : null}
+          <VStack alignment="center" spacing={0} frame={{ maxWidth: Infinity, maxHeight: Infinity }} padding={{ top: 10 }}>
+            <CarView car={car} maxHeight={84} />
+          </VStack>
+          <HStack frame={{ maxWidth: Infinity, maxHeight: Infinity, alignment: "bottom" }}>
+            <Spacer minLength={0} />
+            <StatusPill safe={dw.safe} text={dw.text} />
+          </HStack>
+        </ZStack>
+      </HStack>
+    </VStack>
+  )
+}
+
+function MediumWidget({ snapshot, logo, car, privacy }: {
+  snapshot: VehicleSnapshot
+  logo: UIImage | null
+  car: UIImage | null
+  privacy: boolean
+}) {
+  return (
+    <VStack
+      spacing={0}
+      padding={14}
+      frame={{ maxWidth: Infinity, maxHeight: Infinity, alignment: "topLeading" }}
+      widgetURL={deepLink("overview")}
+      widgetBackground={CARD_BG}
+    >
+      <StatusBoard snapshot={snapshot} logo={logo} car={car} privacy={privacy} fill />
+    </VStack>
   )
 }
 
@@ -358,97 +428,43 @@ function LockBadge({ snapshot }: { snapshot: VehicleSnapshot }) {
   )
 }
 
-function LargeWidget({ snapshot, logo, mapImage, privacy }: {
+function LargeWidget({ snapshot, logo, car, mapImage, privacy }: {
   snapshot: VehicleSnapshot
   logo: UIImage | null
+  car: UIImage | null
   mapImage: UIImage | null
   privacy: boolean
 }) {
-  const freshness = getFreshness(snapshot)
   return (
     <VStack
-      alignment="leading"
-      spacing={6}
-      padding={10}
+      spacing={0}
       frame={{ maxWidth: Infinity, maxHeight: Infinity, alignment: "topLeading" }}
       widgetURL={deepLink("overview")}
       widgetBackground={CARD_BG}
     >
-      {/* 头部：车名（留白防裁切）+ 车牌 + 锁车 + logo */}
-      <HStack spacing={6} frame={{ maxWidth: Infinity, alignment: "leading" }}>
-        <Text font="title3" fontWeight="bold" lineLimit={1} minScaleFactor={0.5} frame={{ maxWidth: Infinity, alignment: "leading" }}>
-          {snapshot.identity.displayName}
-        </Text>
-        <Spacer minLength={0} />
-        {snapshot.identity.plateMasked ? (
-          <Text font={8} foregroundStyle="secondaryLabel" lineLimit={1} minScaleFactor={0.6}>{snapshot.identity.plateMasked}</Text>
-        ) : null}
-        <LockBadge snapshot={snapshot} />
-        <LogoView logo={logo} size={18} />
-      </HStack>
+      {/* 模块一：信息（与中号完全一致，固定高度 155） */}
+      <VStack spacing={8} padding={14} frame={{ maxWidth: Infinity, height: 155 }}>
+        <StatusBoard snapshot={snapshot} logo={logo} car={car} privacy={privacy} fill />
+      </VStack>
 
-      {/* 信息卡：左 1/3 胎压 2×2（左上右上下左右下），右 2/3 油量/能耗/续航/总里程 */}
-      <HStack spacing={10} padding={9} background={SUB_BG} clipShape={{ type: "rect", cornerRadius: 12 }} frame={{ maxWidth: Infinity, alignment: "leading" }}>
-        {snapshot.tires ? (
-          <VStack alignment="leading" spacing={5} frame={{ width: 86, alignment: "leading" }}>
-            <HStack spacing={10}>
-              <TireCell label="左前" tire={snapshot.tires?.frontLeft} />
-              <TireCell label="右前" tire={snapshot.tires?.frontRight} />
-            </HStack>
-            <HStack spacing={10}>
-              <TireCell label="左后" tire={snapshot.tires?.rearLeft} />
-              <TireCell label="右后" tire={snapshot.tires?.rearRight} />
-            </HStack>
-          </VStack>
-        ) : null}
-        <VStack alignment="leading" spacing={5} frame={{ maxWidth: Infinity, alignment: "leading" }}>
-          <HStack spacing={10}>
-            <LargeStat icon="fuelpump.fill" value={fuelLevelText(snapshot)} label="油量" />
-            <LargeStat icon="flame.fill" value={consumptionText(snapshot)} label="能耗" />
-          </HStack>
-          <HStack spacing={10}>
-            <LargeStat icon="map" value={snapshot.energy.rangeKm != null ? `${snapshot.energy.rangeKm}㎞` : "—㎞"} label="续航" />
-            <LargeStat icon="gauge.with.dots.needle.67percent" value={snapshot.mileageKm != null ? `${snapshot.mileageKm.toLocaleString()}㎞` : "—"} label="总里程" />
-          </HStack>
-        </VStack>
-      </HStack>
-
-      {/* 分隔线：车况信息 / 地理位置 */}
-      <VStack frame={{ maxWidth: Infinity, height: 1 }} background={{ light: "#D1D1D6", dark: "#3A3A3C" } as any} />
-
-      {/* 地图：静态快照（居中对齐；scaleToFill + 匹配宽高比快照，撑满无空隙且不撑宽） */}
+      {/* 弹性空隙：把地图压到组件底部 */}
       <Spacer minLength={0} />
-      <HStack frame={{ maxWidth: Infinity, alignment: "center" }}>
-        {!privacy && mapImage ? (
-          <ZStack frame={{ maxWidth: Infinity, height: 220 }} clipShape={{ type: "rect", cornerRadius: 14 }}>
-            <Image image={mapImage} resizable scaleToFill frame={{ maxWidth: Infinity, height: 220 }} />
-          </ZStack>
-        ) : (
-          <VStack
-            alignment="center"
-            spacing={4}
-            frame={{ maxWidth: Infinity, height: 220 }}
-            background={SUB_BG}
-            clipShape={{ type: "rect", cornerRadius: 14 }}
-          >
-            <Image systemName={privacy ? "eye.slash.fill" : "map.fill"} font={22} foregroundStyle="secondaryLabel" />
-            <Text font={9} foregroundStyle="secondaryLabel">{privacy ? "地图已隐藏" : "位置不可用"}</Text>
-          </VStack>
-        )}
-      </HStack>
-
-      {/* 地址 + 数据状态（地图下方） */}
-      <HStack spacing={3} frame={{ maxWidth: Infinity, alignment: "leading" }}>
-        <Image systemName="location.fill" font={9} foregroundStyle="secondaryLabel" />
-        <Text font={9} foregroundStyle="secondaryLabel" lineLimit={1} frame={{ maxWidth: Infinity, alignment: "leading" }}>
-          {privacy ? "位置已隐藏" : (snapshot.location?.address ?? "位置不可用")}
-        </Text>
-        <Spacer minLength={0} />
-        <Image systemName="circle.fill" font={5} foregroundStyle={freshnessColor(freshness) as any} />
-        <Text font={8} fontWeight="medium" foregroundStyle={freshnessColor(freshness) as any}>
-          {freshnessLabel(freshness)}
-        </Text>
-      </HStack>
+      {/* 模块二：地图（高度 150，底部对齐） */}
+      {!privacy && mapImage ? (
+        <ZStack frame={{ maxWidth: Infinity, height: 150 }}>
+          <Image image={mapImage} resizable scaleToFill frame={{ maxWidth: Infinity, height: 150 }} />
+        </ZStack>
+      ) : (
+        <VStack
+          alignment="center"
+          spacing={4}
+          frame={{ maxWidth: Infinity, height: 150 }}
+          background={SUB_BG}
+        >
+          <Image systemName={privacy ? "eye.slash.fill" : "map.fill"} font={22} foregroundStyle="secondaryLabel" />
+          <Text font={9} foregroundStyle="secondaryLabel">{privacy ? "地图已隐藏" : "位置不可用"}</Text>
+        </VStack>
+      )}
     </VStack>
   )
 }
@@ -531,8 +547,8 @@ async function main() {
   const privacy = resolvePrivacy(parameter, loadSettings())
   const family = Widget.family
   const logo = await loadLogo()
-  // 只有小号/中号需要车辆图；大号下半部分是静态地图快照
-  const needsCar = family === "systemSmall" || family === "systemMedium"
+  // 小/中/大号都需要车辆图；大号顶部与中号一致，底部为地图快照
+  const needsCar = family === "systemSmall" || family === "systemMedium" || family === "systemLarge" || family === "systemExtraLarge"
   const car = needsCar ? await fetchOfficialCarImage(snapshot) : null
   const mapImage = await loadMapImage()
 
@@ -545,11 +561,11 @@ async function main() {
       content = <SmallWidget snapshot={snapshot} car={car} />
       break
     case "systemMedium":
-      content = <MediumWidget snapshot={snapshot} car={car} privacy={privacy} />
+      content = <MediumWidget snapshot={snapshot} logo={logo} car={car} privacy={privacy} />
       break
     case "systemLarge":
     case "systemExtraLarge":
-      content = <LargeWidget snapshot={snapshot} logo={logo} mapImage={mapImage} privacy={privacy} />
+      content = <LargeWidget snapshot={snapshot} logo={logo} car={car} mapImage={mapImage} privacy={privacy} />
       break
     default:
       content = <SmallWidget snapshot={snapshot} car={car} />
