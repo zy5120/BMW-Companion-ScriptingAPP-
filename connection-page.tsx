@@ -53,24 +53,24 @@ type Operation = "idle" | "sendingSms" | "passwordLogin" | "smsLogin" | "switchi
 function errorMessage(error: unknown): string {
   const code = error instanceof Error ? error.message : String(error)
   const known: Record<string, string> = {
-    NONCE_CONSENT_REQUIRED: "请先阅读并同意临时 nonce 服务披露。",
+    NONCE_CONSENT_REQUIRED: "请先阅读并同意服务说明。",
     MOBILE_INVALID: "请输入正确的中国大陆手机号（86 + 11 位，或 11 位手机号）。",
     PASSWORD_INVALID: "请输入 BMW 密码。",
-    CAPTCHA_POSITION_NOT_FOUND: "未能识别 BMW 滑块验证码，请稍后重试。",
-    CAPTCHA_VERIFY_REJECTED: "BMW 图形校验未通过，请稍后重试。",
-    PUBLIC_KEY_INVALID: "BMW 公钥响应格式异常。",
-    PASSWORD_ENCRYPTION_FAILED: "密码本地加密失败。",
+    CAPTCHA_POSITION_NOT_FOUND: "未能识别滑动验证码，请稍后重试。",
+    CAPTCHA_VERIFY_REJECTED: "图形校验未通过，请稍后重试。",
+    PUBLIC_KEY_INVALID: "BMW 安全连接异常，请稍后重试。",
+    PASSWORD_ENCRYPTION_FAILED: "密码处理失败，请重试。",
     LOGIN_REJECTED: "BMW 拒绝登录，请检查账号、密码或验证码。",
     SMS_REQUEST_REJECTED: "短信验证码发送失败。",
     SMS_CODE_INVALID: "请输入收到的短信验证码。",
-    NONCE_PROVIDER_REJECTED: "临时 nonce 服务拒绝了请求。",
-    NONCE_RESPONSE_INVALID: "临时 nonce 服务返回格式异常。",
+    NONCE_PROVIDER_REJECTED: "辅助服务暂时不可用，请稍后重试。",
+    NONCE_RESPONSE_INVALID: "辅助服务返回异常，请稍后重试。",
     VEHICLE_LIST_EMPTY: "账号下没有读取到车辆。",
-    VEHICLE_STATE_INVALID: "BMW 车辆状态响应异常。",
+    VEHICLE_STATE_INVALID: "车辆状态获取失败，请稍后重试。",
   }
   if (known[code]) return known[code]
   if (code.startsWith("BMW_HTTP_")) return `BMW 请求失败（${code.replace("BMW_HTTP_", "HTTP ")}）。`
-  if (code.startsWith("NONCE_HTTP_")) return `nonce 服务请求失败（${code.replace("NONCE_HTTP_", "HTTP ")}）。`
+  if (code.startsWith("NONCE_HTTP_")) return `辅助服务请求失败（${code.replace("NONCE_HTTP_", "HTTP ")}）。`
   return `操作失败：${code.slice(0, 120)}`
 }
 
@@ -141,15 +141,15 @@ export function ConnectionPage() {
 
   const askConsent = async () => {
     const accepted = await Dialog.confirm({
-      title: "临时 nonce 服务披露",
-      message: `${nonceDisclosure.message}\n\n仅在你点击登录、发送短信或刷新时调用。是否同意临时使用？`,
+      title: "服务说明",
+      message: `${nonceDisclosure.message}\n\n仅在你点击登录、发送短信或刷新时调用。是否同意？`,
       cancelLabel: "不同意",
-      confirmLabel: "同意临时使用",
+      confirmLabel: "同意并继续",
     })
     if (accepted) {
       grantNonceConsent()
       setConsented(true)
-      setStatus("已同意临时 nonce 服务")
+      setStatus("已同意服务说明")
     }
   }
 
@@ -219,7 +219,7 @@ export function ConnectionPage() {
   const signOut = async () => {
     const accepted = await Dialog.confirm({
       title: "退出 BMW 会话？",
-      message: "只删除本机 Keychain 会话；最后一次有效车况缓存会保留。",
+      message: "将清除本机的登录信息，已同步的车况数据会保留。",
       cancelLabel: "取消",
       confirmLabel: "退出登录",
     })
@@ -246,7 +246,7 @@ export function ConnectionPage() {
     >
       <Section
         header={<Text font="headline">连接状态</Text>}
-        footer={<Text font="caption">密码和短信验证码只存在于当前页面内存，不会保存。Token 与 GCID 只写入本机 Keychain。</Text>}
+        footer={<Text font="caption">密码和短信验证码不会保存；登录凭证只安全保存在本机。</Text>}
       >
         <HStack spacing={10}>
           {busy ? <ProgressView /> : <Image systemName={loadSession() ? "checkmark.shield.fill" : "car.badge.key.fill"} foregroundStyle={ACCENT} />}
@@ -279,32 +279,32 @@ export function ConnectionPage() {
       </Section>
 
       <Section
-        header={<Text font="headline">第三方 nonce 披露</Text>}
-        footer={<Text font="caption">此服务不是 BMW 官方服务，且旧接口使用 GET query。拒绝后仍可使用演示模式。</Text>}
+        header={<Text font="headline">登录辅助服务</Text>}
+        footer={<Text font="caption">登录依赖第三方辅助服务（非 BMW 官方）。拒绝后仍可体验演示数据。</Text>}
       >
         <VStack alignment="leading" spacing={8} padding={{ vertical: 6 }}>
           <Text font="subheadline" fontWeight="semibold">m.qqtlr.com</Text>
-          <Text font="caption" foregroundStyle="secondaryLabel">登录发送手机号；续期发送 GCID；可能留下 URL、IP 和请求时间日志。不发送密码、验证码或 Token。</Text>
+          <Text font="caption" foregroundStyle="secondaryLabel">登录时会发送手机号等必要信息到该服务，可能留下访问记录；密码、短信验证码和登录凭证不会发送。</Text>
         </VStack>
         {consented ? (
           <Button
-            title="撤回临时授权"
+            title="撤回授权"
             systemImage="hand.raised.fill"
             role="destructive"
             action={() => {
               revokeNonceConsent()
               setConsented(false)
-              setStatus("已撤回 nonce 服务授权")
+              setStatus("已撤回授权")
             }}
           />
         ) : (
-          <Button title="阅读并同意临时使用" systemImage="checkmark.shield" action={askConsent} />
+          <Button title="阅读并同意" systemImage="checkmark.shield" action={askConsent} />
         )}
       </Section>
 
       <Section
         header={<Text font="headline">BMW 账号</Text>}
-        footer={<Text font="caption">手机号需含国家区号：86 + 11 位手机号（如 8613800138000）。手机号只在提交请求时使用，不会持久化。</Text>}
+        footer={<Text font="caption">手机号需含国家区号：86 + 11 位（如 8613800138000）。手机号仅在提交时使用，不会保存。</Text>}
       >
         <TextField title="手机号" prompt="86 开头，如 8613800138000" value={phone} onChanged={setPhone} />
       </Section>
