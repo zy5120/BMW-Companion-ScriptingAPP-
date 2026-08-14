@@ -1,12 +1,7 @@
 import { BMW_CLIENT } from "./compat-config"
 
 /**
- * Clean-room rewrite of the bounded arithmetic at the end of the reference
- * script's getSignature(). No anti-debugging, self-modifying code, eval,
- * recursion, mutable loop bounds or growing arrays are present here.
- *
- * This signature protects the request to the temporary nonce provider. It is
- * NOT BMW's x-login-nonce algorithm.
+ * 生成请求临时 nonce 提供方所需的签名。
  */
 export function createCompatProviderSignature(
   identifier: string,
@@ -26,8 +21,7 @@ export function createCompatProviderSignature(
 
   const identifierNumber = Number(numericIdentifier)
   const buildNumber = Number(build)
-  // The reference base class returns Unix seconds, and getSignature divides that
-  // value by 1000 once more. Preserve that unusual contract exactly.
+  // 时间桶：Unix 毫秒再除以 1000 取整
   const referenceTimeBucket = Math.floor(nowMilliseconds / 1_000_000)
   const mixed = identifierNumber + referenceTimeBucket + buildNumber
   if (!Number.isSafeInteger(mixed) || mixed <= 0) {
