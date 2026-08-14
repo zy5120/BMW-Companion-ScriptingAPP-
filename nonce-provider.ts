@@ -30,7 +30,7 @@ export const nonceDisclosure = {
   path: COMPAT_NONCE_PATH,
   disclosureVersion: 1 as const,
   message:
-    "临时兼容服务不是 BMW 官方服务。登录时手机号、续期时 GCID 会作为 HTTPS GET URL 查询参数发送到 m.qqtlr.com；URL 可能进入服务端或中间日志。密码、短信验证码和 BMW Token 不会发送给该服务。",
+    "登录需要连接一个第三方辅助服务（非 BMW 官方）完成验证。过程中会把手机号等必要信息发送到该服务，可能留下访问记录；密码、短信验证码和登录凭证不会发送。",
 }
 
 export function loadNonceConsent(): NonceConsentRecord | null {
