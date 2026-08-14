@@ -58,7 +58,7 @@ import {
   setRuntimeMode,
 } from "./storage"
 
-const PROJECT_NAME = "BMW Companion"
+const PROJECT_NAME = "BMW MINI Linker"
 const ACCENT = "#166DFF"
 const CARD = "secondarySystemBackground"
 
