@@ -130,7 +130,7 @@ function findCaptchaPosition(base64: string): string {
 }
 
 async function createAndVerifyCaptcha(mobile: string): Promise<CaptchaChallenge> {
-  // 参考脚本 getSliderCaptcha 的随机 x 兜底：先试固定值，失败则随机换 correlation/x 重试
+  // 滑动验证随机 x 兜底：先试固定值，失败则随机换 correlation/x 重试
   const candidates: Array<Record<string, string>> = [COMPAT_HEADERS_X]
   for (let i = 0; i < 15; i++) candidates.push(randomHeadersX())
 
@@ -172,7 +172,7 @@ async function createAndVerifyCaptcha(mobile: string): Promise<CaptchaChallenge>
   return { verifyId: data.verifyId, mobile }
 }
 
-// 参考脚本 getSliderCaptcha 的随机 x 兜底：x = 前缀 + md5(uuid) + md5(uuid)，截取 64 位
+// 滑动验证随机 x：x = 前缀 + md5(uuid) + md5(uuid)，截取 64 位
 const HEADERS_X_KEY = "bmw.companion.v2.headersX"
 
 function uuidv4(): string {
