@@ -494,6 +494,7 @@ function normalizeVehicle(vehicle: RawVehicle, state: Record<string, any>): Vehi
       model: typeof vehicle.model === "string" ? vehicle.model : undefined,
       plateMasked: typeof vehicle.licensePlate === "string" && vehicle.licensePlate.length > 2
         ? `${vehicle.licensePlate.slice(0, 1)}***${vehicle.licensePlate.slice(-1)}` : undefined,
+      plate: typeof vehicle.licensePlate === "string" ? vehicle.licensePlate : undefined,
     },
     energy: {
       type: electric && fuel ? "hybrid" : electric ? "electric" : fuel ? "fuel" : "unknown",
