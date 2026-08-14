@@ -12,7 +12,7 @@ export function formatRelativeTime(iso?: string, now = Date.now()): string {
   return `${Math.round(hours / 24)} 天前`
 }
 
-// 参考脚本 formatStatusLabel：车辆最近同步时间。当天显示 HH:mm更新，跨天显示 MM-dd HH:mm更新。
+// 车辆最近同步时间：当天显示 HH:mm更新，跨天显示 MM-dd HH:mm更新。
 export function formatSyncTime(iso?: string, now = new Date()): string {
   if (!iso) return ""
   const date = new Date(iso)
