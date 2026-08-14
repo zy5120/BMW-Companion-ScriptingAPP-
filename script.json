@@ -2,10 +2,10 @@
   "runInApp" : false,
   "version" : "0.1.9",
   "localizedDescriptions" : {
-    "zh-Hans" : "隐私披露下的 BMW 只读车况临时兼容版"
+    "zh-Hans" : "作者：厦门硬骨头"
   },
   "name" : "BMW Companion",
-  "description" : "A privacy-first native BMW vehicle status companion for Scripting.",
+  "description" : "作者：厦门硬骨头",
   "author" : {
     "name" : "厦门硬骨头",
     "homepage" : null,
