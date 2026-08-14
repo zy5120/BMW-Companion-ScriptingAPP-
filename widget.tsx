@@ -71,6 +71,24 @@ function consumptionText(snapshot: VehicleSnapshot): string {
   return `${snapshot.energy.consumption}${snapshot.energy.consumptionUnit ? ` ${snapshot.energy.consumptionUnit}` : ""}`
 }
 
+// 按车型返回“油量/电量”文本：燃油车→L，纯电车→%，混动车→L/%。
+function energySecondaryText(snapshot: VehicleSnapshot): string {
+  const e = snapshot.energy
+  const liters = e.remainingLiters != null ? `${Math.round(e.remainingLiters)}L` : ""
+  const percent = e.levelPercent != null ? `${Math.round(e.levelPercent)}%` : ""
+  switch (e.type) {
+    case "electric": return percent || "—"
+    case "hybrid": return liters && percent ? `${liters}/${percent}` : liters || percent || "—"
+    case "fuel": return liters || "—"
+    default: return liters || percent || "—"
+  }
+}
+
+// 按车型返回能源图标：纯电→闪电，燃油/混动→加油机。
+function energyIcon(snapshot: VehicleSnapshot): string {
+  return snapshot.energy.type === "electric" ? "bolt.fill" : "fuelpump.fill"
+}
+
 // 官方车辆图片：需要 VIN + 有效 token（Keychain，同一脚本作用域）。
 // 官方车辆图片：eadrax-ics/v3/presentation/vehicles/{vin}/images?carView=VehicleStatus
 async function fetchOfficialCarImage(snapshot: VehicleSnapshot): Promise<UIImage | null> {
@@ -207,7 +225,7 @@ function SmallWidget({ snapshot, car }: { snapshot: VehicleSnapshot; car: UIImag
   const lockIcon = info.locked ? "lock.shield.fill" : "xmark.shield.fill"
   const model = snapshot.identity.model ?? snapshot.identity.displayName
   const rangeText = snapshot.energy.rangeKm != null ? `${snapshot.energy.rangeKm}km` : "—km"
-  const fuelText = snapshot.energy.remainingLiters != null ? `${Math.round(snapshot.energy.remainingLiters)}L` : "—"
+  const fuelText = energySecondaryText(snapshot)
   return (
     <VStack
       alignment="leading"
@@ -225,9 +243,9 @@ function SmallWidget({ snapshot, car }: { snapshot: VehicleSnapshot; car: UIImag
         <Spacer minLength={0} />
         <Image systemName={lockIcon} font={14} foregroundStyle={lockColor as any} />
       </HStack>
-      {/* 副标题：剩余里程/油量，如 500km/35L */}
+      {/* 副标题：剩余里程 + 油量/电量，如 500km/35L 或 500km/80% */}
       <HStack spacing={4}>
-        <Image systemName="fuelpump.fill" font={9} foregroundStyle={ACCENT} />
+        <Image systemName={energyIcon(snapshot)} font={9} foregroundStyle={ACCENT} />
         <Text font="caption" foregroundStyle="secondaryLabel" lineLimit={1} minScaleFactor={0.8}>
           {`${rangeText}/${fuelText}`}
         </Text>
@@ -315,10 +333,10 @@ function StatusBoard({ snapshot, logo, car, privacy, fill }: {
             <StatCard icon="gauge.with.dots.needle.67percent" value={snapshot.mileageKm != null ? `${snapshot.mileageKm.toLocaleString()}㎞` : "—"} />
             <StatCard icon="flame.fill" value={consumptionText(snapshot)} />
           </HStack>
-          {/* 第二行：续航 | 油量 */}
+          {/* 第二行：续航 | 油量/电量（按车型） */}
           <HStack spacing={8} frame={{ maxWidth: Infinity, alignment: "leading" }}>
             <StatCard icon="map" value={snapshot.energy.rangeKm != null ? `${snapshot.energy.rangeKm}㎞` : "—㎞"} />
-            <StatCard icon="fuelpump.fill" value={snapshot.energy.remainingLiters != null ? `${Math.round(snapshot.energy.remainingLiters)}L` : "—"} />
+            <StatCard icon={energyIcon(snapshot)} value={energySecondaryText(snapshot)} />
           </HStack>
           {/* 第三、四行：胎压 2×2（左上=左前 / 右上=右前 / 左下=左后 / 右下=右后） */}
           {snapshot.tires ? (
