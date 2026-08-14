@@ -322,7 +322,6 @@ function StatusDetailsPage({ showClose = false }: { showClose?: boolean }) {
     >
       <Section
         header={<Text font="headline">安全状态</Text>}
-        footer={<Text font="caption">未知状态不会被视为安全。Phase 0 不执行任何车辆控制。</Text>}
       >
         <HStack spacing={10}>
           <Image
@@ -366,7 +365,7 @@ function TireDetailsPage() {
       <VStack spacing={16} padding={16}>
         <VStack alignment="leading" spacing={5} frame={{ maxWidth: Infinity, alignment: "leading" }}>
           <Text font="title2" fontWeight="bold">四轮胎压</Text>
-          <Text font="subheadline" foregroundStyle="secondaryLabel">{snapshot.source === "network" ? `数值来自最近一次 ${vehicleBrand(snapshot)} 连接快照。` : "数值来自本地演示快照，仅用于布局验证。"}</Text>
+          <Text font="subheadline" foregroundStyle="secondaryLabel">{snapshot.source === "network" ? "数据来自车辆最近一次同步。" : "当前为演示数据。"}</Text>
         </VStack>
         <LazyVGrid
           columns={[
@@ -505,8 +504,7 @@ function LocationPage({ showClose = false }: { showClose?: boolean }) {
 
 function WidgetPreviewPage() {
   const options = {
-    "默认总览": JSON.stringify({ vehicleId: "demo-bmw-i4", theme: "overview", privacy: "inherit" }),
-    "隐私模式": JSON.stringify({ vehicleId: "demo-bmw-i4", theme: "overview", privacy: "on" }),
+    "默认总览": JSON.stringify({ vehicleId: "demo-bmw-i4", theme: "overview" }),
   }
   const preview = async (family: "accessoryRectangular" | "systemSmall" | "systemMedium" | "systemLarge") => {
     await Widget.preview({ family, parameters: { options, default: "默认总览" } })
@@ -545,7 +543,6 @@ function SettingsPage() {
     <List navigationTitle="设置" navigationBarTitleDisplayMode="inline">
       <Section
         header={<Text font="headline">BMW 账号</Text>}
-        footer={<Text font="caption">临时兼容版只允许前台登录和刷新。第三方 nonce 服务会在连接页单独披露并征得同意。</Text>}
       >
         <NavigationLink destination={connectionDestination}>
           <HStack>
@@ -736,7 +733,7 @@ function DashboardPage() {
             icon="gauge.with.dots.needle.67percent"
             title="总里程"
             value={snapshot.mileageKm != null ? `${snapshot.mileageKm.toLocaleString()} km` : "—"}
-            subtitle={snapshot.source === "network" ? `${brand} 只读快照` : "本地演示快照"}
+            subtitle={snapshot.source === "network" ? `${brand} 车辆数据` : "本地演示数据"}
           />
         </LazyVGrid>
 
@@ -825,12 +822,6 @@ function DashboardPage() {
           </NavigationLink>
         </VStack>
 
-        <HStack spacing={7}>
-          <Image systemName="shield.lefthalf.filled" foregroundStyle={freshnessColor(freshness) as any} />
-          <Text font="caption" foregroundStyle="secondaryLabel">
-            {`${freshnessLabel(freshness)} · ${snapshot.source === "network" ? `${brand} 只读数据` : "演示模式"}`}
-          </Text>
-        </HStack>
         {refreshStatus ? (
           <Text font="caption" foregroundStyle="secondaryLabel">{refreshStatus}</Text>
         ) : null}
