@@ -30,6 +30,8 @@ export const defaultSettings: CompanionSettings = {
   staleHours: 6,
   defaultVehicleId: "demo-bmw-i4",
   selectedVin: "",
+  noTiresLine1: "",
+  noTiresLine2: "",
 }
 
 export function loadSettings(): CompanionSettings {
