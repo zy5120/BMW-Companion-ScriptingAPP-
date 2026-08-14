@@ -1,13 +1,11 @@
 // @ts-nocheck
-// Vendored JSEncrypt (UMD bundle) extracted from the reference widget
-// "bmw-linker" (author: meiDaiSan). Self-contained so the project does not
-// depend on the Scripting npm auto-install for the password-login path.
+// 内嵌的 JSEncrypt（UMD 包），自包含，避免依赖 Scripting 的 npm 自动安装。
 //
 // The bundle is a UMD factory: when CommonJS module/exports exist it assigns
 // module.exports = <JSEncrypt class>. We provide a scoped CommonJS shim and a
 // scoped window object (the bundle falls back to Math.random when window has
-// no crypto / addEventListener, matching the reference's `let window=this`),
-// invoke the factory, and re-export the class as the default export.
+// no crypto / addEventListener), invoke the factory, and re-export the class
+// as the default export.
 
 function loadJSEncrypt(): any {
   const module: any = { exports: {} }
