@@ -34,7 +34,7 @@ const CARD_BG = { light: "#F6F8FC", dark: "#111827" } as any
 const SUB_BG = "tertiarySystemBackground"
 
 function deepLink(route: "overview" | "status" | "location"): string {
-  return Script.createRunURLScheme("BMW Companion", { route })
+  return Script.createRunURLScheme("BMW MINI Linker", { route })
 }
 
 // ---------- 参考脚本同款展示小工具 ----------
