@@ -1,7 +1,6 @@
-// BMW Companion
+// BMW MINI Linker
 // 作者: @厦门硬骨头
-// 部分逻辑参考 Scriptable BMW 小组件作者: @没打伞
-// 仅限个人学习使用，请尊重原作者代码，勿直接抄袭
+// 仅限个人学习使用，请勿用于商业用途。
 import {
   Button,
   fetch,
@@ -566,7 +565,7 @@ function SettingsPage() {
       </Section>
       <Section
         header={<Text font="headline">关于</Text>}
-        footer={<Text font="caption">部分逻辑参考 Scriptable BMW 小组件 @没打伞。本工具仅供个人学习使用，请勿用于商业用途。</Text>}
+        footer={<Text font="caption">本工具仅供个人学习使用，请勿用于商业用途。</Text>}
       >
         <HStack>
           <Text>版本</Text>
