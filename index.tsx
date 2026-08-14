@@ -4,6 +4,7 @@
 // 仅限个人学习使用，请尊重原作者代码，勿直接抄袭
 import {
   Button,
+  fetch,
   Gauge,
   HStack,
   Image,
@@ -21,6 +22,7 @@ import {
   Section,
   Spacer,
   Text,
+  TextField,
   Toggle,
   VStack,
   Widget,
@@ -31,6 +33,7 @@ import {
 } from "scripting"
 import { ConnectionPage } from "./connection-page"
 import { fetchFirstVehicleSnapshot, renewSession } from "./bmw-client"
+import { BMW_HEADERS, BMW_HOST, brandUserAgent } from "./compat-config"
 import { refreshMapSnapshot } from "./map-snapshot"
 import { loadSession, saveSession } from "./session-vault"
 import type { KnownState, TireState, VehicleSnapshot } from "./domain"
@@ -50,7 +53,6 @@ import {
   loadSettings,
   loadSnapshot,
   refreshDemoSnapshot,
-  resetDemoSnapshot,
   saveConnectedSnapshot,
   saveSettings,
   setRuntimeMode,
@@ -162,16 +164,56 @@ function TireCard({ tirePosition, tire }: { tirePosition: string; tire?: TireSta
   )
 }
 
+// 官方车辆图片：需要 VIN + 有效 token（Keychain）。用于车况页顶部卡片右侧展示车辆实拍图。
+async function fetchOfficialCarImage(snapshot: VehicleSnapshot): Promise<UIImage | null> {
+  try {
+    const session = loadSession()
+    if (!session || !snapshot.vin) return null
+    let usable = session
+    if (Date.parse(session.accessTokenExpiresAt) <= Date.now() + 60_000) {
+      usable = await renewSession(session)
+      saveSession(usable)
+    }
+    const url =
+      `${BMW_HOST}/eadrax-ics/v3/presentation/vehicles/${encodeURIComponent(snapshot.vin)}/images?carView=VehicleStatus`
+    const brand = snapshot.identity.brand?.toLowerCase() === "mini" ? "MINI" : "BMW"
+    const response = await fetch(url, {
+      method: "GET",
+      headers: { ...BMW_HEADERS, "x-user-agent": brandUserAgent(brand), authorization: `Bearer ${usable.accessToken}` },
+      timeout: 12,
+      handleRedirect: async request => (request.url.startsWith(BMW_HOST) ? request : null),
+      debugLabel: "official car image",
+    })
+    if (!response.ok) return null
+    const data = await response.data()
+    if (!data || data.size === 0) return null
+    return UIImage.fromData(data)
+  } catch (error) {
+    console.warn("official car image unavailable:", error instanceof Error ? error.message : String(error))
+    return null
+  }
+}
+
 function EnergyHero({ snapshot }: { snapshot: VehicleSnapshot }) {
   const level = snapshot.energy.levelPercent ?? 0
   const range = snapshot.energy.rangeKm
   const electric = snapshot.energy.type === "electric"
+  const [carImage, setCarImage] = useState<UIImage | null>(null)
+  useEffect(() => {
+    let cancelled = false
+    setCarImage(null)
+    fetchOfficialCarImage(snapshot)
+      .then(img => { if (!cancelled && img) setCarImage(img) })
+      .catch(() => {})
+    return () => { cancelled = true }
+  }, [snapshot.vin])
   return (
     <HStack
       spacing={18}
       padding={18}
       background={{ light: "#EAF2FF", dark: "#10233F" } as any}
       clipShape={{ type: "rect", cornerRadius: 24, style: "continuous" }}
+      frame={{ maxWidth: Infinity, alignment: "leading" }}
     >
       <Gauge
         value={level}
@@ -197,6 +239,10 @@ function EnergyHero({ snapshot }: { snapshot: VehicleSnapshot }) {
           </Text>
         </HStack>
       </VStack>
+      <Spacer />
+      {carImage ? (
+        <Image image={carImage} resizable scaleToFit frame={{ width: 100, height: 64 }} />
+      ) : null}
     </HStack>
   )
 }
@@ -222,7 +268,7 @@ function VehicleHeader({ snapshot }: { snapshot: VehicleSnapshot }) {
             {snapshot.identity.displayName}
           </Text>
           <Text font="subheadline" foregroundStyle="secondaryLabel">
-            {[snapshot.identity.model, snapshot.identity.plateMasked].filter(Boolean).join(" · ")}
+            {[snapshot.identity.model, snapshot.identity.plate ?? snapshot.identity.plateMasked].filter(Boolean).join(" · ")}
           </Text>
         </VStack>
         <Spacer />
@@ -290,9 +336,9 @@ function StatusDetailsPage({ showClose = false }: { showClose?: boolean }) {
         </HStack>
       </Section>
       <Section header={<Text font="headline">门窗状态</Text>}>
-        {snapshot.access.doors !== "unknown" ? <AccessRow icon="car.side.front.open" label="车门" state={snapshot.access.doors} /> : null}
-        {snapshot.access.windows !== "unknown" ? <AccessRow icon="rectangle.split.3x1" label="车窗" state={snapshot.access.windows} /> : null}
-        {snapshot.access.roof !== "unknown" ? <AccessRow icon="sunroof.fill" label="天窗" state={snapshot.access.roof} /> : null}
+        {snapshot.access.doors !== "unknown" ? <AccessRow icon="car.top.door.front.left.open" label="车门" state={snapshot.access.doors} /> : null}
+        {snapshot.access.windows !== "unknown" ? <AccessRow icon="car.window.left" label="车窗" state={snapshot.access.windows} /> : null}
+        {snapshot.access.roof !== "unknown" ? <AccessRow icon="rectangle.split.3x1" label="天窗" state={snapshot.access.roof} /> : null}
         {snapshot.access.hood !== "unknown" ? <AccessRow icon="car.side.front.open" label="引擎盖" state={snapshot.access.hood} /> : null}
         {snapshot.access.trunk !== "unknown" ? <AccessRow icon="car.side.rear.open" label="后备箱" state={snapshot.access.trunk} /> : null}
         {snapshot.access.doors === "unknown" && snapshot.access.windows === "unknown" && snapshot.access.roof === "unknown" && snapshot.access.hood === "unknown" && snapshot.access.trunk === "unknown" ? (
@@ -482,11 +528,17 @@ function WidgetPreviewPage() {
 }
 
 function SettingsPage() {
-  const initial = loadSettings()
-  const [privacyMode, setPrivacyMode] = useState(initial.privacyMode)
-  const persistPrivacy = (value: boolean) => {
-    setPrivacyMode(value)
-    saveSettings({ ...loadSettings(), privacyMode: value })
+  const settings0 = loadSettings()
+  const [noTiresLine1, setNoTiresLine1] = useState(settings0.noTiresLine1 ?? "")
+  const [noTiresLine2, setNoTiresLine2] = useState(settings0.noTiresLine2 ?? "")
+  const persistNoTiresLine1 = (value: string) => {
+    setNoTiresLine1(value)
+    saveSettings({ ...loadSettings(), noTiresLine1: value })
+    Widget.reloadAll()
+  }
+  const persistNoTiresLine2 = (value: string) => {
+    setNoTiresLine2(value)
+    saveSettings({ ...loadSettings(), noTiresLine2: value })
     Widget.reloadAll()
   }
   const connectionDestination = useMemo(() => <ConnectionPage />, [])
@@ -506,24 +558,11 @@ function SettingsPage() {
         </NavigationLink>
       </Section>
       <Section
-        header={<Text font="headline">隐私</Text>}
-        footer={<Text font="caption">开启后隐藏停车地址和地图。Token 与账号不会写入快照；VIN 仅用于在组件中获取官方车辆图片。</Text>}
+        header={<Text font="headline">无胎压数据时显示</Text>}
+        footer={<Text font="caption">部分车辆（如无胎压传感器的车型）不会返回四轮胎压数据，组件会空出两行。在此填入自定义文案，分别显示在组件胎压区域的两行占位处；留空则不显示占位。</Text>}
       >
-        <Toggle title="隐私模式" value={privacyMode} onChanged={persistPrivacy} />
-      </Section>
-      <Section
-        header={<Text font="headline">本地数据</Text>}
-        footer={<Text font="caption">演示快照与最后一次有效车况快照分开保存；网络失败不会覆盖旧数据。</Text>}
-      >
-        <Button
-          title="重置演示快照"
-          systemImage="arrow.counterclockwise"
-          action={() => {
-            resetDemoSnapshot()
-            Widget.reloadAll()
-            void Dialog?.alert?.({ title: "已重置", message: "演示数据已恢复。", buttonLabel: "好" })
-          }}
-        />
+        <TextField title="第一行" prompt="如：暂无胎压数据" value={noTiresLine1} onChanged={persistNoTiresLine1} />
+        <TextField title="第二行" prompt="如：请检查车辆配置" value={noTiresLine2} onChanged={persistNoTiresLine2} />
       </Section>
       <Section
         header={<Text font="headline">关于</Text>}
@@ -532,7 +571,7 @@ function SettingsPage() {
         <HStack>
           <Text>版本</Text>
           <Spacer />
-          <Text foregroundStyle="secondaryLabel">0.1.8</Text>
+          <Text foregroundStyle="secondaryLabel">0.1.9</Text>
         </HStack>
         <HStack>
           <Text>作者</Text>
