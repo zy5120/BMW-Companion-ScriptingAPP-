@@ -10,6 +10,7 @@ export function makeDemoSnapshot(now = new Date()): VehicleSnapshot {
       brand: "BMW",
       model: "i4 eDrive40",
       plateMasked: "沪A·•••28",
+      plate: "沪A·D1238",
     },
     energy: {
       type: "electric",
