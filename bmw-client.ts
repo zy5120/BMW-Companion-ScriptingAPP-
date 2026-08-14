@@ -426,6 +426,28 @@ function checkDetail(item: any): string | undefined {
   return typeLabel && severityLabel ? `${typeLabel}${severityLabel}` : undefined
 }
 
+// 从车辆列表 attributes/properties 中读取直接的驱动类型字段（比“看车况里有没有能源数据”更可靠）。
+// BMW 中国区接口常见字段：driveTrain / driveTrainType / powerType / energyType，值类似 BEV / HYBRID / CO / FUEL。
+function driveTypeFromProperties(properties?: Record<string, any>): "fuel" | "electric" | "hybrid" | "unknown" {
+  if (!properties || typeof properties !== "object") return "unknown"
+  const up = [
+    properties.driveTrain,
+    properties.driveTrainType,
+    properties.powerType,
+    properties.energyType,
+    properties.driveType,
+    properties.engineType,
+  ]
+    .filter(value => typeof value === "string")
+    .map(value => value.trim().toUpperCase())
+    .join("|")
+  if (!up) return "unknown"
+  if (/HYBRID|PHEV|PLUG/.test(up)) return "hybrid"
+  if (/BEV|ELECTRIC/.test(up)) return "electric"
+  if (/COMBUSTION|^CO$|FUEL|ICE|DIESEL|GASOLINE|PETROL/.test(up)) return "fuel"
+  return "unknown"
+}
+
 function normalizeVehicle(vehicle: RawVehicle, state: Record<string, any>): VehicleSnapshot {
   const vin = typeof vehicle.vin === "string" ? vehicle.vin : ""
   if (!/^[A-HJ-NPR-Z0-9]{17}$/i.test(vin)) throw new Error("VEHICLE_VIN_INVALID")
@@ -433,6 +455,10 @@ function normalizeVehicle(vehicle: RawVehicle, state: Record<string, any>): Vehi
   const fuel = state.combustionFuelLevel
   const level = finiteNumber(electric?.chargingLevelPercent ?? fuel?.remainingFuelPercent)
   const range = finiteNumber(electric?.range ?? fuel?.range)
+  // 驱动类型：优先取车辆列表的显式字段，其次按车况里有没有能源数据推断
+  const explicitType = driveTypeFromProperties(vehicle.properties)
+  const inferredType = electric && fuel ? "hybrid" : electric ? "electric" : fuel ? "fuel" : "unknown"
+  const energyType = explicitType !== "unknown" ? explicitType : inferredType
   const doors = state.doorsState ?? {}
   const windows = state.windowsState ?? {}
   const roof = state.roofState ?? {}
@@ -497,7 +523,7 @@ function normalizeVehicle(vehicle: RawVehicle, state: Record<string, any>): Vehi
       plate: typeof vehicle.licensePlate === "string" ? vehicle.licensePlate : undefined,
     },
     energy: {
-      type: electric && fuel ? "hybrid" : electric ? "electric" : fuel ? "fuel" : "unknown",
+      type: energyType,
       levelPercent: level != null && level >= 0 && level <= 100 ? level : undefined,
       remainingLiters: finiteNumber(fuel?.remainingFuelLiters),
       rangeKm: range != null && range >= 0 ? range : undefined,
