@@ -37,7 +37,7 @@ function deepLink(route: "overview" | "status" | "location"): string {
   return Script.createRunURLScheme("BMW MINI Linker", { route })
 }
 
-// ---------- 参考脚本同款展示小工具 ----------
+// ---------- 通用展示小工具 ----------
 
 function lockInfo(snapshot: VehicleSnapshot): { text: string; locked: boolean; unknown: boolean } {
   if (snapshot.access.lock === "unknown") return { text: "锁车状态未知", locked: false, unknown: true }
@@ -72,7 +72,7 @@ function consumptionText(snapshot: VehicleSnapshot): string {
 }
 
 // 官方车辆图片：需要 VIN + 有效 token（Keychain，同一脚本作用域）。
-// 参考脚本 getBmwOfficialImage：eadrax-ics/v3/presentation/vehicles/{vin}/images?carView=VehicleStatus
+// 官方车辆图片：eadrax-ics/v3/presentation/vehicles/{vin}/images?carView=VehicleStatus
 async function fetchOfficialCarImage(snapshot: VehicleSnapshot): Promise<UIImage | null> {
   try {
     const session = loadSession()
@@ -170,7 +170,7 @@ function TirePair({ label, tire }: { label: string; tire?: { pressureBar?: numbe
   )
 }
 
-// ---------- 锁屏矩形（参考 renderRectangular） ----------
+// ---------- 锁屏矩形 ----------
 
 function AccessoryRectangular({ snapshot, logo }: { snapshot: VehicleSnapshot; logo: UIImage | null }) {
   const info = lockInfo(snapshot)
@@ -199,7 +199,7 @@ function AccessoryRectangular({ snapshot, logo }: { snapshot: VehicleSnapshot; l
   )
 }
 
-// ---------- 小号（参考 renderSmall） ----------
+// ---------- 小号 ----------
 
 function SmallWidget({ snapshot, car }: { snapshot: VehicleSnapshot; car: UIImage | null }) {
   const info = lockInfo(snapshot)
@@ -244,7 +244,7 @@ function SmallWidget({ snapshot, car }: { snapshot: VehicleSnapshot; car: UIImag
   )
 }
 
-// ---------- 中号（参考 renderMedium） ----------
+// ---------- 中号 ----------
 
 function MediumRow({ icon, label, value }: { icon: string; label: string; value: string }) {
   return (
