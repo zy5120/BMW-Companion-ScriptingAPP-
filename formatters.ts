@@ -59,7 +59,9 @@ export function knownStateLabel(value: KnownState, subject: string): string {
 
 export function safetySummary(snapshot: VehicleSnapshot): { safe: boolean; text: string } {
   const access = snapshot.access
-  const unknown = [access.lock, access.doors, access.windows, access.roof].some(value => value === "unknown")
+  // 天窗（roof）状态很多车型不上报（返回 unknown），不应因此判“部分状态未知”；
+  // 只在 roof === "open" 时才作为“有门窗未关闭”告警。
+  const unknown = [access.lock, access.doors, access.windows].some(value => value === "unknown")
   if (unknown) return { safe: false, text: "部分状态未知" }
   if (access.lock !== "locked") return { safe: false, text: "车辆未锁" }
   if ([access.doors, access.windows, access.roof, access.hood, access.trunk].some(value => value === "open")) {
