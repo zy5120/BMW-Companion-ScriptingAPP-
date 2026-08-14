@@ -193,6 +193,15 @@ async function fetchOfficialCarImage(snapshot: VehicleSnapshot): Promise<UIImage
   }
 }
 
+function energyTypeLabel(snapshot: VehicleSnapshot): string {
+  switch (snapshot.energy.type) {
+    case "electric": return "纯电车"
+    case "hybrid": return "混动车"
+    case "fuel": return "燃油车"
+    default: return "车辆能源"
+  }
+}
+
 function EnergyHero({ snapshot }: { snapshot: VehicleSnapshot }) {
   const level = snapshot.energy.levelPercent ?? 0
   const range = snapshot.energy.rangeKm
@@ -225,6 +234,7 @@ function EnergyHero({ snapshot }: { snapshot: VehicleSnapshot }) {
         frame={{ width: 86, height: 86 }}
       />
       <VStack alignment="leading" spacing={5} layoutPriority={1}>
+        <Text font="caption" fontWeight="semibold" foregroundStyle={ACCENT}>{energyTypeLabel(snapshot)}</Text>
         <Text font="caption" foregroundStyle="secondaryLabel">预计剩余续航</Text>
         <Text font={36} fontWeight="bold" foregroundStyle="label" lineLimit={1} minScaleFactor={0.7}>
           {range != null ? `${range} km` : "—"}
@@ -567,7 +577,7 @@ function SettingsPage() {
         <HStack>
           <Text>版本</Text>
           <Spacer />
-          <Text foregroundStyle="secondaryLabel">0.2.1</Text>
+          <Text foregroundStyle="secondaryLabel">0.2.2</Text>
         </HStack>
         <HStack>
           <Text>作者</Text>
