@@ -427,49 +427,51 @@ function checkDetail(item: any): string | undefined {
   return typeLabel && severityLabel ? `${typeLabel}${severityLabel}` : undefined
 }
 
-// 从车辆列表 attributes/properties 中读取直接的驱动类型字段（比“看车况里有没有能源数据”更可靠）。
-// BMW 中国区接口常见字段：driveTrain / driveTrainType / powerType / energyType，值类似 BEV / HYBRID / CO / FUEL。
-function driveTypeFromProperties(properties?: Record<string, any>): "fuel" | "electric" | "hybrid" | "unknown" {
-  if (!properties || typeof properties !== "object") return "unknown"
-  const up = [
-    properties.driveTrain,
-    properties.driveTrainType,
-    properties.powerType,
-    properties.energyType,
-    properties.driveType,
-    properties.engineType,
-  ]
-    .filter(value => typeof value === "string")
-    .map(value => value.trim().toUpperCase())
-    .join("|")
-  if (!up) return "unknown"
-  if (/HYBRID|PHEV|PLUG/.test(up)) return "hybrid"
-  if (/BEV|ELECTRIC/.test(up)) return "electric"
-  if (/COMBUSTION|^CO$|FUEL|ICE|DIESEL|GASOLINE|PETROL/.test(up)) return "fuel"
+// 识别逻辑①：vehicle-data/profile 接口的 driveTrain 直接字段（COMBUSTION / ELECTRIC / HYBRID）。
+// 这是最可靠的驱动类型来源，替代基于车况能源字段的推断。
+function driveTypeFromProfile(profile?: Record<string, any> | null): "fuel" | "electric" | "hybrid" | "unknown" {
+  const dt = typeof profile?.driveTrain === "string" ? profile.driveTrain.trim().toUpperCase() : ""
+  if (!dt) return "unknown"
+  if (/HYBRID|PHEV/.test(dt)) return "hybrid"
+  if (/ELECTRIC|BEV/.test(dt)) return "electric"
+  if (/COMBUSTION|^CO$|FUEL|ICE|DIESEL|GASOLINE|PETROL/.test(dt)) return "fuel"
   return "unknown"
 }
 
-function normalizeVehicle(vehicle: RawVehicle, state: Record<string, any>): VehicleSnapshot {
+// 拉取车辆数据档案（vehicle-data/profile），取 driveTrain 直接字段
+async function fetchVehicleProfile(
+  session: BMWSessionSecrets,
+  vin: string,
+  brand: "BMW" | "MINI",
+): Promise<Record<string, any> | null> {
+  try {
+    return await requestJSON<Record<string, any>>("/eadrax-vcs/v5/vehicle-data/profile", {
+      method: "GET",
+      headers: {
+        authorization: `Bearer ${session.accessToken}`,
+        "bmw-vin": vin,
+        "x-user-agent": brandUserAgent(brand),
+      },
+    })
+  } catch {
+    return null
+  }
+}
+
+function normalizeVehicle(
+  vehicle: RawVehicle,
+  state: Record<string, any>,
+  profileType: "fuel" | "electric" | "hybrid" | "unknown",
+): VehicleSnapshot {
   const vin = typeof vehicle.vin === "string" ? vehicle.vin : ""
   if (!/^[A-HJ-NPR-Z0-9]{17}$/i.test(vin)) throw new Error("VEHICLE_VIN_INVALID")
   const electric = state.electricChargingState
   const fuel = state.combustionFuelLevel
   const level = finiteNumber(electric?.chargingLevelPercent ?? fuel?.remainingFuelPercent)
   const range = finiteNumber(electric?.range ?? fuel?.range)
-  // 驱动类型：优先取车辆列表的显式字段，其次按车况里有实际数值的能源字段推断。
-  // 注意：接口可能对纯电车也返回一个空的 combustionFuelLevel 对象（{}），
-  // 因此不能只看对象是否存在，要看里面有没有实际数值。
-  const hasElectricData = Boolean(electric && (
-    finiteNumber(electric.chargingLevelPercent) != null || finiteNumber(electric.range) != null
-  ))
-  const hasFuelData = Boolean(fuel && (
-    finiteNumber(fuel.remainingFuelPercent) != null ||
-    finiteNumber(fuel.remainingFuelLiters) != null ||
-    finiteNumber(fuel.range) != null
-  ))
-  const explicitType = driveTypeFromProperties(vehicle.properties)
-  const inferredType = hasElectricData && hasFuelData ? "hybrid" : hasElectricData ? "electric" : hasFuelData ? "fuel" : "unknown"
-  const energyType = explicitType !== "unknown" ? explicitType : inferredType
+  // 能源类型只认两个逻辑：1) profile 的 driveTrain 直接字段；2) 用户手动覆盖（applyEnergyOverride，见 storage）。
+  // 不再基于车况能源字段推断，避免纯电车因接口返回空油量对象被误判成混动。
+  const energyType = profileType
   const doors = state.doorsState ?? {}
   const windows = state.windowsState ?? {}
   const roof = state.roofState ?? {}
@@ -712,7 +714,10 @@ export async function fetchFirstVehicleSnapshot(
     },
   })
   if (!stateResponse.state || typeof stateResponse.state !== "object") throw new Error("VEHICLE_STATE_INVALID")
-  const snapshot = applyEnergyOverride(normalizeVehicle(vehicle, stateResponse.state))
+  // 识别逻辑①：profile 的 driveTrain 直接字段（取不到时返回 unknown，交给用户手动覆盖兜底）
+  const profile = await fetchVehicleProfile(session, vin, brand)
+  const profileType = driveTypeFromProfile(profile)
+  const snapshot = applyEnergyOverride(normalizeVehicle(vehicle, stateResponse.state, profileType))
   const consumption = await fetchConsumption(session, vin, snapshot.energy.type, brand)
   if (consumption) {
     snapshot.energy.consumption = consumption.value
