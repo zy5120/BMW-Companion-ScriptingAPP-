@@ -601,8 +601,18 @@ function SettingsPage() {
     Widget.reloadAll()
   }
   const connectionDestination = useMemo(() => <ConnectionPage />, [])
+  // 点击「关于 → 版本」弹出更新日志
+  const [showChangelog, setShowChangelog] = useState(false)
   return (
-    <List navigationTitle="设置" navigationBarTitleDisplayMode="inline">
+    <List
+      navigationTitle="设置"
+      navigationBarTitleDisplayMode="inline"
+      sheet={{
+        isPresented: showChangelog,
+        onChanged: setShowChangelog,
+        content: <UpdateSheet notes={CHANGELOG} />,
+      }}
+    >
       <Section
         header={<Text font="headline">BMW 账号</Text>}
       >
@@ -624,12 +634,23 @@ function SettingsPage() {
       </Section>
       <Section
         header={<Text font="headline">关于</Text>}
-        footer={<Text font="caption">本工具仅供个人学习使用，请勿用于商业用途。</Text>}
+        footer={
+          <VStack alignment="leading" spacing={3}>
+            <Text font="caption" foregroundStyle="secondaryLabel">点击版本号可查看更新日志</Text>
+            <Text font="caption" foregroundStyle="secondaryLabel">本插件完全免费，如果遇到任何售卖请及时投诉。</Text>
+            <Text font="caption" foregroundStyle="secondaryLabel">本工具仅供个人学习使用</Text>
+            <Text font="caption" foregroundStyle="secondaryLabel">请勿用于商业用途</Text>
+          </VStack>
+        }
       >
         <HStack>
           <Text>版本</Text>
           <Spacer />
-          <Text foregroundStyle="secondaryLabel">{CURRENT_VERSION}</Text>
+          <Button
+            title={CURRENT_VERSION}
+            action={() => setShowChangelog(true)}
+            foregroundStyle="secondaryLabel"
+          />
         </HStack>
         <HStack>
           <Text>作者</Text>
@@ -905,10 +926,7 @@ function UpdateSheet({ notes }: { notes: VersionNote[] }) {
       presentationDetents={["medium", "large"]}
       presentationDragIndicator="visible"
     >
-      <VStack alignment="leading" spacing={3}>
-        <Text font="title2" fontWeight="bold">更新内容</Text>
-        <Text font="caption" foregroundStyle="secondaryLabel">v{CURRENT_VERSION}</Text>
-      </VStack>
+      <Text font="title2" fontWeight="bold">更新内容</Text>
       <ScrollView>
         <VStack alignment="leading" spacing={16} padding={{ top: 14, bottom: 20 }}>
           {notes.map(note => (

@@ -1,5 +1,5 @@
 // 版本号与更新日志（用于「更新展示」sheet 与设置页版本号）
-export const CURRENT_VERSION = "0.2.5"
+export const CURRENT_VERSION = "0.2.6"
 
 export interface VersionNote {
   version: string
@@ -7,8 +7,18 @@ export interface VersionNote {
   notes: string[]
 }
 
-// 按新→旧排列。新增版本时在顶部加一条，并把 CURRENT_VERSION 同步更新。
+// 按新→旧排列，最多保留近 5 条（slice 兜底，超出自动截断；发版时也建议删除最旧条目）。
+// 新增版本时在顶部加一条，并把 CURRENT_VERSION 同步更新。
 export const CHANGELOG: VersionNote[] = [
+  {
+    version: "0.2.6",
+    title: "界面展示优化",
+    notes: [
+      "关于页点版本号可查看更新日志",
+      "更新日志最多展示近 5 条",
+      "底部新增免费与反售卖提示",
+    ],
+  },
   {
     version: "0.2.5",
     title: "更新提示与自动刷新",
@@ -37,7 +47,7 @@ export const CHANGELOG: VersionNote[] = [
       "车况页刷新状态提示优化",
     ],
   },
-]
+].slice(0, 5)
 
 // 版本号比较：a > b 返回 true（如 0.2.10 > 0.2.9）
 export function versionNewer(a: string, b: string): boolean {
