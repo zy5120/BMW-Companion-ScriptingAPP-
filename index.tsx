@@ -940,7 +940,8 @@ function RootView() {
   useEffect(() => {
     if (!lastSeen || versionNewer(CURRENT_VERSION, lastSeen)) setShowUpdate(true)
   }, [])
-  const unseenNotes = CHANGELOG.filter(note => !lastSeen || versionNewer(note.version, lastSeen))
+  // 弹层展示完整更新日志（触发时机仍只看是否有新版本）
+  const updateNotes = CHANGELOG
   const closeUpdate = (visible: boolean) => {
     setShowUpdate(visible)
     if (!visible) {
@@ -952,7 +953,7 @@ function RootView() {
       sheet={{
         isPresented: showUpdate,
         onChanged: closeUpdate,
-        content: <UpdateSheet notes={unseenNotes} />,
+        content: <UpdateSheet notes={updateNotes} />,
       }}
     >
       {initial}
