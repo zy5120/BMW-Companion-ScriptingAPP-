@@ -26,11 +26,11 @@ import {
   type VehicleListItem,
 } from "./bmw-client"
 import {
+  getNonceDisclosure,
   grantNonceConsent,
   loadNonceConsent,
-  nonceDisclosure,
-  revokeNonceConsent,
 } from "./nonce-provider"
+import type { NonceProviderId } from "./domain"
 import { loadSession, removeSession, saveSession } from "./session-vault"
 import { refreshMapSnapshot } from "./map-snapshot"
 import { loadSettings, saveConnectedSnapshot, saveSettings, setRuntimeMode } from "./storage"
@@ -76,14 +76,34 @@ function errorMessage(error: unknown): string {
 
 export function ConnectionPage() {
   const dismiss = Navigation.useDismiss()
-  const [phone, setPhone] = useState("")
+  const [phone, setPhone] = useState(loadSettings().savedPhone ?? "")
   const [password, setPassword] = useState("")
   const [smsCode, setSmsCode] = useState("")
   const [challenge, setChallenge] = useState<SmsChallenge | null>(null)
-  const [consented, setConsented] = useState(() => Boolean(loadNonceConsent()))
   const [operation, setOperation] = useState<Operation>("idle")
-  const [status, setStatus] = useState(loadSession() ? "已保存 BMW 会话" : "尚未连接")
+  const [status, setStatus] = useState(loadSession() ? "已登录" : "尚未连接")
   const busy = operation !== "idle"
+  const loggedIn = Boolean(loadSession())
+
+  // 登录验证服务（可插拔 nonce 提供方）设置
+  const settings0 = loadSettings()
+  const [nonceProvider, setNonceProvider] = useState<NonceProviderId>(settings0.nonceProvider ?? "qqtlr")
+  const [customNonceUrl, setCustomNonceUrl] = useState(settings0.customNonceUrl ?? "")
+  const persistNonceProvider = (value: NonceProviderId) => {
+    setNonceProvider(value)
+    saveSettings({ ...loadSettings(), nonceProvider: value })
+    Widget.reloadAll()
+  }
+  const persistCustomNonceUrl = (value: string) => {
+    setCustomNonceUrl(value)
+    saveSettings({ ...loadSettings(), customNonceUrl: value })
+    Widget.reloadAll()
+  }
+  // 记住手机号，避免重复输入（仅本机保存）
+  const persistPhone = (value: string) => {
+    setPhone(value)
+    saveSettings({ ...loadSettings(), savedPhone: value })
+  }
 
   const [vehicles, setVehicles] = useState<VehicleListItem[]>([])
   const [selectedVin, setSelectedVin] = useState("")
@@ -139,18 +159,24 @@ export function ConnectionPage() {
     }
   }
 
-  const askConsent = async () => {
+  // 首次登录 / 切换服务后弹窗征得同意；取消则回退设置页
+  const ensureConsent = async (): Promise<boolean> => {
+    if (loadNonceConsent()) return true
+    const disclosure = getNonceDisclosure()
     const accepted = await Dialog.confirm({
-      title: "服务说明",
-      message: `${nonceDisclosure.message}\n\n仅在你点击登录、发送短信或刷新时调用。是否同意？`,
+      title: "登录辅助服务",
+      message: `${disclosure.message}\n\n是否同意并继续登录？`,
       cancelLabel: "不同意",
-      confirmLabel: "同意并继续",
+      confirmLabel: "我同意",
     })
     if (accepted) {
       grantNonceConsent()
-      setConsented(true)
-      setStatus("已同意服务说明")
+      setStatus("已同意登录辅助服务")
+      return true
     }
+    setStatus("未同意登录辅助服务")
+    dismiss()
+    return false
   }
 
   const finishLogin = async (session: Awaited<ReturnType<typeof loginWithPassword>>) => {
@@ -170,6 +196,7 @@ export function ConnectionPage() {
 
   const passwordLogin = async () => {
     if (busy) return
+    if (!(await ensureConsent())) return
     setOperation("passwordLogin")
     setStatus("正在进行密码登录…")
     try {
@@ -186,6 +213,7 @@ export function ConnectionPage() {
 
   const sendSms = async () => {
     if (busy) return
+    if (!(await ensureConsent())) return
     setOperation("sendingSms")
     setStatus("正在完成图形校验并发送短信…")
     try {
@@ -279,68 +307,67 @@ export function ConnectionPage() {
       </Section>
 
       <Section
-        header={<Text font="headline">登录辅助服务</Text>}
-        footer={<Text font="caption">登录依赖第三方辅助服务（非 BMW 官方）。拒绝后仍可体验演示数据。</Text>}
+        header={<Text font="headline">登录验证服务</Text>}
+        footer={<Text font="caption">用于登录验证的 nonce 服务。</Text>}
       >
-        <VStack alignment="leading" spacing={8} padding={{ vertical: 6 }}>
-          <Text font="subheadline" fontWeight="semibold">m.qqtlr.com</Text>
-          <Text font="caption" foregroundStyle="secondaryLabel">登录时会发送手机号等必要信息到该服务，可能留下访问记录；密码、短信验证码和登录凭证不会发送。</Text>
-        </VStack>
-        {consented ? (
-          <Button
-            title="撤回授权"
-            systemImage="hand.raised.fill"
-            role="destructive"
-            action={() => {
-              revokeNonceConsent()
-              setConsented(false)
-              setStatus("已撤回授权")
-            }}
-          />
-        ) : (
-          <Button title="阅读并同意" systemImage="checkmark.shield" action={askConsent} />
-        )}
-      </Section>
-
-      <Section
-        header={<Text font="headline">BMW 账号</Text>}
-        footer={<Text font="caption">手机号需含国家区号：86 + 11 位（如 8613800138000）。手机号仅在提交时使用，不会保存。</Text>}
-      >
-        <TextField title="手机号" prompt="86 开头，如 8613800138000" value={phone} onChanged={setPhone} />
-      </Section>
-
-      <Section
-        header={<Text font="headline">短信登录</Text>}
-        footer={<Text font="caption">图形校验和短信挑战不会保存；页面关闭后需重新发送。若短信通道不可用，可改用下方密码登录。</Text>}
-      >
-        <Button
-          title={operation === "sendingSms" ? "正在发送" : "发送短信验证码"}
-          systemImage="message.fill"
-          disabled={!consented || busy || !phone}
-          action={sendSms}
-        />
-        {challenge ? (
-          <>
-            <TextField title="短信验证码" prompt="输入验证码" value={smsCode} onChanged={value => setSmsCode(value.replace(/\D/g, "").slice(0, 8))} />
-            <Button
-              title={operation === "smsLogin" ? "正在登录" : "使用短信验证码连接"}
-              systemImage="checkmark.circle.fill"
-              disabled={busy || !smsCode}
-              action={smsLogin}
-            />
-          </>
+        <Picker
+          value={nonceProvider}
+          onChanged={(value: string) => persistNonceProvider(value as NonceProviderId)}
+          pickerStyle="menu"
+          title="nonce 服务"
+          systemImage="arrow.triangle.2.circlepath"
+        >
+          <Text tag="qqtlr">默认（推荐）</Text>
+          <Text tag="custom">自定义地址</Text>
+        </Picker>
+        {nonceProvider === "custom" ? (
+          <TextField title="自定义地址" prompt="如 https://example.com/api/nonce" value={customNonceUrl} onChanged={persistCustomNonceUrl} />
         ) : null}
       </Section>
 
-      <Section header={<Text font="headline">密码登录</Text>}>
-        <SecureField title="BMW 密码" prompt="输入密码" value={password} onChanged={setPassword} />
-        <Button
-          title={operation === "passwordLogin" ? "正在登录" : "使用密码连接"}
-          systemImage="key.fill"
-          disabled={!consented || busy || !phone || !password}
-          action={passwordLogin}
-        />
-      </Section>
+      {!loggedIn ? (
+        <>
+          <Section
+            header={<Text font="headline">BMW 账号</Text>}
+            footer={<Text font="caption">手机号需含国家区号：86 + 11 位（如 8613800138000）。手机号会保存在本机避免重复输入，仅在提交登录时使用。</Text>}
+          >
+            <TextField title="手机号" prompt="86 开头，如 8613800138000" value={phone} onChanged={persistPhone} />
+          </Section>
+
+          <Section
+            header={<Text font="headline">短信登录</Text>}
+            footer={<Text font="caption">图形校验和短信挑战不会保存；页面关闭后需重新发送。若短信通道不可用，可改用下方密码登录。</Text>}
+          >
+            <Button
+              title={operation === "sendingSms" ? "正在发送" : "发送短信验证码"}
+              systemImage="message.fill"
+              disabled={busy || !phone}
+              action={sendSms}
+            />
+            {challenge ? (
+              <>
+                <TextField title="短信验证码" prompt="输入验证码" value={smsCode} onChanged={value => setSmsCode(value.replace(/\D/g, "").slice(0, 8))} />
+                <Button
+                  title={operation === "smsLogin" ? "正在登录" : "使用短信验证码连接"}
+                  systemImage="checkmark.circle.fill"
+                  disabled={busy || !smsCode}
+                  action={smsLogin}
+                />
+              </>
+            ) : null}
+          </Section>
+
+          <Section header={<Text font="headline">密码登录</Text>}>
+            <SecureField title="BMW 密码" prompt="输入密码" value={password} onChanged={setPassword} />
+            <Button
+              title={operation === "passwordLogin" ? "正在登录" : "使用密码连接"}
+              systemImage="key.fill"
+              disabled={busy || !phone || !password}
+              action={passwordLogin}
+            />
+          </Section>
+        </>
+      ) : null}
 
       <Section header={<Text font="headline">会话管理</Text>}>
         <Button title="退出 BMW 会话" systemImage="rectangle.portrait.and.arrow.right" role="destructive" action={signOut} />

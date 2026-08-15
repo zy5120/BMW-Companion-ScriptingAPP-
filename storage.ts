@@ -32,6 +32,9 @@ export const defaultSettings: CompanionSettings = {
   selectedVin: "",
   noTiresLine1: "",
   noTiresLine2: "",
+  nonceProvider: "qqtlr",
+  customNonceUrl: "",
+  savedPhone: "",
 }
 
 export function loadSettings(): CompanionSettings {

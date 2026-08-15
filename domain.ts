@@ -3,6 +3,9 @@ export type KnownState = "closed" | "open" | "unknown"
 export type LockState = "locked" | "unlocked" | "unknown"
 export type ChargingState = "charging" | "complete" | "stopped" | "disconnected" | "unknown"
 export type Freshness = "fresh" | "stale" | "expired" | "missing" | "invalid"
+// 登录 nonce 服务提供方：m.qqtlr.com / 自定义地址（自建服务或测试）
+// 详见 nonce-provider.ts 与设置页「登录验证服务」。
+export type NonceProviderId = "qqtlr" | "custom"
 
 export interface TireState {
   pressureBar?: number
@@ -81,6 +84,11 @@ export interface CompanionSettings {
   // 无胎压数据时的占位文案（部分车型不返回胎压，组件空出两行时显示）
   noTiresLine1?: string
   noTiresLine2?: string
+  // 登录 nonce 服务提供方（可插拔，见 nonce-provider.ts）
+  nonceProvider?: NonceProviderId
+  customNonceUrl?: string
+  // 记住手机号，避免重复输入（仅本机保存）
+  savedPhone?: string
 }
 
 export interface WidgetParameter {
