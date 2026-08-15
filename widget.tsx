@@ -62,16 +62,20 @@ function fuelLevelText(snapshot: VehicleSnapshot): string {
   const e = snapshot.energy
   const percent = e.levelPercent != null ? `${Math.round(e.levelPercent)}%` : ""
   const liters = e.remainingLiters != null ? `${Math.round(e.remainingLiters)}L` : ""
+  // 燃油车剩余油量统一显示百分比（宝马接口的升数不一定返回，百分比总能取到）
+  if (e.type === "fuel") return percent || liters || "—"
   if (liters && percent) return `${liters}/${percent}`
   return liters || percent || "—"
 }
 
 function consumptionText(snapshot: VehicleSnapshot): string {
   if (snapshot.energy.consumption == null) return "—"
-  return `${snapshot.energy.consumption}${snapshot.energy.consumptionUnit ? ` ${snapshot.energy.consumptionUnit}` : ""}`
+  // 中号/大号组件空间有限，去掉“/100km”后缀（如 L/100km → L，kWh/100km → kWh；
+  // 混动的字符串油耗同样去掉，如 “6.5 L/100km · 14.2 kWh/100km” → “6.5 L · 14.2 kWh”）。
+  return `${snapshot.energy.consumption}${snapshot.energy.consumptionUnit ? ` ${snapshot.energy.consumptionUnit}` : ""}`.replace(/\/100km/g, "")
 }
 
-// 按车型返回“油量/电量”文本：燃油车→L，纯电车→%，混动车→L/%。
+// 按车型返回“油量/电量”文本：燃油车→%，纯电车→%，混动车→L/%。
 function energySecondaryText(snapshot: VehicleSnapshot): string {
   const e = snapshot.energy
   const liters = e.remainingLiters != null ? `${Math.round(e.remainingLiters)}L` : ""
@@ -79,7 +83,8 @@ function energySecondaryText(snapshot: VehicleSnapshot): string {
   switch (e.type) {
     case "electric": return percent || "—"
     case "hybrid": return liters && percent ? `${liters}/${percent}` : liters || percent || "—"
-    case "fuel": return liters || "—"
+    // 燃油车剩余油量显示百分比（宝马接口升数不一定返回，百分比总能取到），升数仅作兜底
+    case "fuel": return percent || liters || "—"
     default: return liters || percent || "—"
   }
 }

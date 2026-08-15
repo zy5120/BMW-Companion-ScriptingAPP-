@@ -73,7 +73,7 @@ const MINI_LOGO_URL = "https://upload.wikimedia.org/wikipedia/commons/thumb/e/e9
 declare const Dialog: any
 declare const Safari: any
 
-function StatusPill({ icon, title, color }: { icon: string; title: string; color: string }) {
+function StatusPill({ icon, title, color, spinning = false }: { icon: string; title: string; color: string; spinning?: boolean }) {
   return (
     <HStack
       spacing={5}
@@ -81,9 +81,33 @@ function StatusPill({ icon, title, color }: { icon: string; title: string; color
       background={`${color}18` as any}
       clipShape={{ type: "capsule", style: "continuous" }}
     >
-      <Image systemName={icon} font="caption" foregroundStyle={color as any} />
+      {spinning ? (
+        <SpinningIcon systemName={icon} color={color} />
+      ) : (
+        <Image systemName={icon} font="caption" foregroundStyle={color as any} />
+      )}
       <Text font="caption" fontWeight="semibold" foregroundStyle={color as any}>{title}</Text>
     </HStack>
+  )
+}
+
+// 持续旋转的图标：配合 Animation.repeatForever 让刷新箭头动态转动
+function SpinningIcon({ systemName, color }: { systemName: string; color: string }) {
+  const deg = useObservable(0)
+  useEffect(() => {
+    deg.setValue(360)
+  }, [])
+  return (
+    <Image
+      systemName={systemName}
+      font="caption"
+      foregroundStyle={color as any}
+      rotationEffect={deg.value}
+      animation={{
+        animation: Animation.linear(1).repeatForever(false),
+        value: deg.value,
+      }}
+    />
   )
 }
 
@@ -256,8 +280,36 @@ function EnergyHero({ snapshot }: { snapshot: VehicleSnapshot }) {
   )
 }
 
-function VehicleHeader({ snapshot }: { snapshot: VehicleSnapshot }) {
+function VehicleHeader({ snapshot, refreshing = false, refreshResult = null }: {
+  snapshot: VehicleSnapshot
+  refreshing?: boolean
+  refreshResult?: "success" | "failure" | null
+}) {
   const freshness = getFreshness(snapshot)
+  // 状态胶囊：刷新中显示“正在获取车况”，否则显示最近一次刷新结果（已更新/刷新失败），
+  // 没有刷新记录时按数据新鲜度显示（数据最新等）。
+  let pillIcon: string
+  let pillTitle: string
+  let pillColor: string
+  let pillSpinning = false
+  if (refreshing) {
+    pillIcon = "arrow.clockwise"
+    pillTitle = "正在获取车况"
+    pillColor = "#30D158"
+    pillSpinning = true
+  } else if (refreshResult === "success") {
+    pillIcon = "checkmark.circle.fill"
+    pillTitle = "已更新"
+    pillColor = "#30D158"
+  } else if (refreshResult === "failure") {
+    pillIcon = "exclamationmark.triangle.fill"
+    pillTitle = "刷新失败"
+    pillColor = "#FF453A"
+  } else {
+    pillIcon = freshness === "fresh" ? "checkmark.circle.fill" : "clock.fill"
+    pillTitle = freshnessLabel(freshness)
+    pillColor = freshnessColor(freshness)
+  }
   const brand = snapshot.identity.brand?.toLowerCase() === "mini" ? "MINI" : "BMW"
   const [brandLogo, setBrandLogo] = useState<UIImage | null>(null)
   useEffect(() => {
@@ -293,11 +345,7 @@ function VehicleHeader({ snapshot }: { snapshot: VehicleSnapshot }) {
         )}
       </HStack>
       <HStack spacing={8}>
-        <StatusPill
-          icon={freshness === "fresh" ? "checkmark.circle.fill" : "clock.fill"}
-          title={freshnessLabel(freshness)}
-          color={freshnessColor(freshness)}
-        />
+        <StatusPill icon={pillIcon} title={pillTitle} color={pillColor} spinning={pillSpinning} />
         <Text font="caption" foregroundStyle="tertiaryLabel">
           {formatRelativeTime(snapshot.fetchedAt)} · {snapshot.source === "network" ? `${vehicleBrand(snapshot)} 数据` : "演示数据"}
         </Text>
@@ -577,7 +625,7 @@ function SettingsPage() {
         <HStack>
           <Text>版本</Text>
           <Spacer />
-          <Text foregroundStyle="secondaryLabel">0.2.2</Text>
+          <Text foregroundStyle="secondaryLabel">0.2.3</Text>
         </HStack>
         <HStack>
           <Text>作者</Text>
@@ -641,7 +689,7 @@ function DashboardPage() {
   const dismiss = Navigation.useDismiss()
   const [snapshot, setSnapshot] = useState(() => loadSnapshot())
   const [refreshing, setRefreshing] = useState(false)
-  const [refreshStatus, setRefreshStatus] = useState("")
+  const [refreshResult, setRefreshResult] = useState<"success" | "failure" | null>(null)
   const freshness = getFreshness(snapshot)
   const safety = safetySummary(snapshot)
   const brand = vehicleBrand(snapshot)
@@ -662,12 +710,11 @@ function DashboardPage() {
     if (!session) {
       const next = refreshDemoSnapshot()
       setSnapshot(next)
-      setRefreshStatus("未连接车辆，已刷新演示快照")
+      setRefreshResult("success")
       Widget.reloadAll()
       return
     }
     setRefreshing(true)
-    setRefreshStatus(`正在读取 ${brand} 车况…`)
     try {
       let usable = session
       if (Date.parse(session.accessTokenExpiresAt) <= Date.now() + 60_000) {
@@ -678,15 +725,14 @@ function DashboardPage() {
       saveConnectedSnapshot(next)
       setRuntimeMode("connected")
       setSnapshot(next)
-      setRefreshStatus(`${brand} 车况已更新`)
+      setRefreshResult("success")
       Widget.reloadAll()
       // 自动生成停车位置地图快照（离屏渲染），供桌面大号组件使用
       if (next.location) {
         void refreshMapSnapshot(next.location.latitude, next.location.longitude)
       }
-    } catch (error) {
-      const code = error instanceof Error ? error.message : String(error)
-      setRefreshStatus(`刷新失败，继续显示上次数据：${code.slice(0, 100)}`)
+    } catch {
+      setRefreshResult("failure")
     } finally {
       setRefreshing(false)
     }
@@ -722,7 +768,7 @@ function DashboardPage() {
       }}
     >
       <VStack alignment="leading" spacing={16} padding={{ horizontal: 16, top: 10, bottom: 28 }}>
-        <VehicleHeader snapshot={snapshot} />
+        <VehicleHeader snapshot={snapshot} refreshing={refreshing} refreshResult={refreshResult} />
         <EnergyHero snapshot={snapshot} />
 
         <LazyVGrid
@@ -831,10 +877,6 @@ function DashboardPage() {
             </HStack>
           </NavigationLink>
         </VStack>
-
-        {refreshStatus ? (
-          <Text font="caption" foregroundStyle="secondaryLabel">{refreshStatus}</Text>
-        ) : null}
       </VStack>
     </ScrollView>
   )
