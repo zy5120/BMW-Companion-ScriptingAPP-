@@ -1,5 +1,5 @@
 // 版本号与更新日志（用于「更新展示」sheet 与设置页版本号）
-export const CURRENT_VERSION = "0.2.6"
+export const CURRENT_VERSION = "0.2.7"
 
 export interface VersionNote {
   version: string
@@ -10,6 +10,15 @@ export interface VersionNote {
 // 按新→旧排列，最多保留近 5 条（slice 兜底，超出自动截断；发版时也建议删除最旧条目）。
 // 新增版本时在顶部加一条，并把 CURRENT_VERSION 同步更新。
 export const CHANGELOG: VersionNote[] = [
+  {
+    version: "0.2.7",
+    title: "车型识别与深色组件",
+    notes: [
+      "修复部分纯电车被误判成混动的问题",
+      "能源类型识别不准时可手动切换（点击车况页蓝色卡片）",
+      "新增「浅色模式下也显示深色背景」开关",
+    ],
+  },
   {
     version: "0.2.6",
     title: "界面展示优化",

@@ -230,7 +230,7 @@ function energyTypeLabel(snapshot: VehicleSnapshot): string {
   }
 }
 
-function EnergyHero({ snapshot }: { snapshot: VehicleSnapshot }) {
+function EnergyHero({ snapshot, onChangeEnergyType }: { snapshot: VehicleSnapshot; onChangeEnergyType?: () => void }) {
   const level = snapshot.energy.levelPercent ?? 0
   const range = snapshot.energy.rangeKm
   const electric = snapshot.energy.type === "electric"
@@ -244,43 +244,48 @@ function EnergyHero({ snapshot }: { snapshot: VehicleSnapshot }) {
     return () => { cancelled = true }
   }, [snapshot.vin])
   return (
-    <HStack
-      spacing={18}
-      padding={18}
-      background={{ light: "#EAF2FF", dark: "#10233F" } as any}
-      clipShape={{ type: "rect", cornerRadius: 24, style: "continuous" }}
-      frame={{ maxWidth: Infinity, alignment: "leading" }}
-    >
-      <Gauge
-        value={level}
-        min={0}
-        max={100}
-        gaugeStyle="accessoryCircularCapacity"
-        tint={ACCENT}
-        label={<Image systemName={electric ? "bolt.fill" : "fuelpump.fill"} />}
-        currentValueLabel={<Text font="headline" fontWeight="bold">{`${Math.round(level)}%`}</Text>}
-        frame={{ width: 86, height: 86 }}
-      />
-      <VStack alignment="leading" spacing={5} layoutPriority={1}>
-        <Text font="caption" fontWeight="semibold" foregroundStyle={ACCENT}>{energyTypeLabel(snapshot)}</Text>
-        <Text font="caption" foregroundStyle="secondaryLabel">预计剩余续航</Text>
-        <Text font={36} fontWeight="bold" foregroundStyle="label" lineLimit={1} minScaleFactor={0.7}>
-          {range != null ? `${range} km` : "—"}
-        </Text>
-        <HStack spacing={5}>
-          <Image systemName={electric ? "bolt.car.fill" : "fuelpump.fill"} font="caption" foregroundStyle={ACCENT} />
-          <Text font="caption" foregroundStyle="secondaryLabel">
-            {snapshot.energy.consumption != null
-              ? `${snapshot.energy.consumption}${snapshot.energy.consumptionUnit ? ` ${snapshot.energy.consumptionUnit}` : ""}`
-              : "能耗不可用"}
+    <Button action={() => onChangeEnergyType?.()} frame={{ maxWidth: Infinity }}>
+      <HStack
+        spacing={18}
+        padding={18}
+        background={{ light: "#EAF2FF", dark: "#10233F" } as any}
+        clipShape={{ type: "rect", cornerRadius: 24, style: "continuous" }}
+        frame={{ maxWidth: Infinity, alignment: "leading" }}
+      >
+        <Gauge
+          value={level}
+          min={0}
+          max={100}
+          gaugeStyle="accessoryCircularCapacity"
+          tint={ACCENT}
+          label={<Image systemName={electric ? "bolt.fill" : "fuelpump.fill"} />}
+          currentValueLabel={<Text font="headline" fontWeight="bold">{`${Math.round(level)}%`}</Text>}
+          frame={{ width: 86, height: 86 }}
+        />
+        <VStack alignment="leading" spacing={5} layoutPriority={1}>
+          <HStack spacing={3}>
+            <Text font="caption" fontWeight="semibold" foregroundStyle={ACCENT}>{energyTypeLabel(snapshot)}</Text>
+            <Image systemName="chevron.down" font={8} foregroundStyle={ACCENT} />
+          </HStack>
+          <Text font="caption" foregroundStyle="secondaryLabel">预计剩余续航</Text>
+          <Text font={36} fontWeight="bold" foregroundStyle="label" lineLimit={1} minScaleFactor={0.7}>
+            {range != null ? `${range} km` : "—"}
           </Text>
-        </HStack>
-      </VStack>
-      <Spacer />
-      {carImage ? (
-        <Image image={carImage} resizable scaleToFit frame={{ width: 100, height: 64 }} />
-      ) : null}
-    </HStack>
+          <HStack spacing={5}>
+            <Image systemName={electric ? "bolt.car.fill" : "fuelpump.fill"} font="caption" foregroundStyle={ACCENT} />
+            <Text font="caption" foregroundStyle="secondaryLabel">
+              {snapshot.energy.consumption != null
+                ? `${snapshot.energy.consumption}${snapshot.energy.consumptionUnit ? ` ${snapshot.energy.consumptionUnit}` : ""}`
+                : "能耗不可用"}
+            </Text>
+          </HStack>
+        </VStack>
+        <Spacer />
+        {carImage ? (
+          <Image image={carImage} resizable scaleToFit frame={{ width: 100, height: 64 }} />
+        ) : null}
+      </HStack>
+    </Button>
   )
 }
 
@@ -600,6 +605,12 @@ function SettingsPage() {
     saveSettings({ ...loadSettings(), noTiresLine2: value })
     Widget.reloadAll()
   }
+  const [alwaysDark, setAlwaysDark] = useState(settings0.alwaysDarkBackground ?? false)
+  const persistAlwaysDark = (value: boolean) => {
+    setAlwaysDark(value)
+    saveSettings({ ...loadSettings(), alwaysDarkBackground: value })
+    Widget.reloadAll()
+  }
   const connectionDestination = useMemo(() => <ConnectionPage />, [])
   // 点击「关于 → 版本」弹出更新日志
   const [showChangelog, setShowChangelog] = useState(false)
@@ -631,6 +642,12 @@ function SettingsPage() {
       >
         <TextField title="第一行" prompt="如：暂无胎压数据" value={noTiresLine1} onChanged={persistNoTiresLine1} />
         <TextField title="第二行" prompt="如：请检查车辆配置" value={noTiresLine2} onChanged={persistNoTiresLine2} />
+      </Section>
+      <Section
+        header={<Text font="headline">组件外观</Text>}
+        footer={<Text font="caption">开启后，即使手机处于浅色模式，桌面组件也始终显示深色背景（文字颜色会同步调整，保证可读）。</Text>}
+      >
+        <Toggle title="浅色模式下也显示深色背景" value={alwaysDark} onChanged={persistAlwaysDark} />
       </Section>
       <Section
         header={<Text font="headline">关于</Text>}
@@ -729,6 +746,27 @@ function DashboardPage() {
     setSnapshot(next)
   }
 
+  // 兑底：手动切换车辆能源类型（燃油/混动/纯电），仅当前车辆生效
+  const changeEnergyType = async () => {
+    const index = await Dialog.actionSheet({
+      title: "车辆能源类型",
+      message: "自动识别失败或不准时，可手动指定（仅当前车辆生效）。",
+      actions: ["自动识别", "燃油车", "混动车", "纯电车"].map(label => ({ label })),
+    })
+    if (index == null) return
+    const key = snapshot.vin ?? snapshot.localVehicleId
+    const settings = loadSettings()
+    const overrides = { ...(settings.energyTypeOverrides ?? {}) }
+    if (index === 0) {
+      delete overrides[key]
+    } else {
+      overrides[key] = (["fuel", "hybrid", "electric"] as const)[index - 1]
+    }
+    saveSettings({ ...settings, energyTypeOverrides: overrides })
+    setSnapshot(loadSnapshot())
+    Widget.reloadAll()
+  }
+
   const refresh = async () => {
     if (refreshing) return
     const session = loadSession()
@@ -802,7 +840,7 @@ function DashboardPage() {
     >
       <VStack alignment="leading" spacing={16} padding={{ horizontal: 16, top: 10, bottom: 28 }}>
         <VehicleHeader snapshot={snapshot} refreshing={refreshing} refreshResult={refreshResult} />
-        <EnergyHero snapshot={snapshot} />
+        <EnergyHero snapshot={snapshot} onChangeEnergyType={changeEnergyType} />
 
         <LazyVGrid
           columns={[

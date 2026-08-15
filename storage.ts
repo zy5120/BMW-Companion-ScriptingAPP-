@@ -36,6 +36,8 @@ export const defaultSettings: CompanionSettings = {
   customNonceUrl: "",
   savedPhone: "",
   lastSeenVersion: "",
+  alwaysDarkBackground: false,
+  energyTypeOverrides: {},
 }
 
 export function loadSettings(): CompanionSettings {
@@ -83,27 +85,39 @@ export function saveConnectedSnapshot(snapshot: VehicleSnapshot): VehicleSnapsho
   return snapshot
 }
 
+// 兑底：应用用户手动指定的能源类型覆盖（按 VIN）。自动识别失败/有误时使用。
+export function applyEnergyOverride(snapshot: VehicleSnapshot): VehicleSnapshot {
+  const key = snapshot.vin ?? snapshot.localVehicleId
+  const override = loadSettings().energyTypeOverrides?.[key]
+  if (override &&
+      (override === "fuel" || override === "electric" || override === "hybrid") &&
+      override !== snapshot.energy.type) {
+    return { ...snapshot, energy: { ...snapshot.energy, type: override } }
+  }
+  return snapshot
+}
+
 export function loadWidgetSnapshot(): VehicleSnapshot {
   if (loadRuntimeMode() === "connected") {
     const projected = Storage.get<VehicleSnapshot>(WIDGET_SNAPSHOT_KEY, SHARED)
-    if (isValidSnapshot(projected) && projected.source === "network") return projected
+    if (isValidSnapshot(projected) && projected.source === "network") return applyEnergyOverride(projected)
   }
   const demo = Storage.get<VehicleSnapshot>(SNAPSHOT_KEY)
-  return isValidSnapshot(demo) ? demo : makeDemoSnapshot()
+  return applyEnergyOverride(isValidSnapshot(demo) ? demo : makeDemoSnapshot())
 }
 
 export function loadSnapshot(): VehicleSnapshot {
   if (loadRuntimeMode() === "connected") {
     const connected = loadConnectedSnapshot()
-    if (connected) return connected
+    if (connected) return applyEnergyOverride(connected)
   }
   const value = Storage.get<VehicleSnapshot>(SNAPSHOT_KEY)
   if (!isValidSnapshot(value)) {
     const seeded = makeDemoSnapshot()
     Storage.set(SNAPSHOT_KEY, seeded)
-    return seeded
+    return applyEnergyOverride(seeded)
   }
-  return value
+  return applyEnergyOverride(value)
 }
 
 export function refreshDemoSnapshot(): VehicleSnapshot {

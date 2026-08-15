@@ -33,6 +33,30 @@ const LOGO_URL = "https://m.qqtlr.com/logo.png"
 const CARD_BG = { light: "#F6F8FC", dark: "#111827" } as any
 const SUB_BG = "tertiarySystemBackground"
 
+// 强制深色背景：WidgetKit 里 preferredColorScheme 不生效（小组件只能跟随系统深浅色），
+// 因此手动把背景色与系统自适应文字色替换为深色值。
+let FORCE_DARK = false
+
+function setForceDark(value: boolean): void {
+  FORCE_DARK = value
+}
+
+function darkColor(name: string): any {
+  if (!FORCE_DARK) return name
+  switch (name) {
+    case "label": return "#FFFFFF"
+    case "secondaryLabel": return "rgba(235,235,245,0.6)"
+    case "tertiaryLabel": return "rgba(235,235,245,0.3)"
+    case "secondarySystemBackground": return "#1C1C1E"
+    case "tertiarySystemBackground": return "#2C2C2E"
+    default: return name
+  }
+}
+
+function widgetContainerBackground(): any {
+  return FORCE_DARK ? { light: "#111827", dark: "#111827" } : CARD_BG
+}
+
 function deepLink(route: "overview" | "status" | "location"): string {
   return Script.createRunURLScheme("BMW MINI Linker", { route })
 }
@@ -128,7 +152,7 @@ async function fetchOfficialCarImage(snapshot: VehicleSnapshot): Promise<UIImage
 function tirePairColor(status?: string): any {
   if (status === "warning") return "#FF9F0A"
   if (status === "unknown") return "#8E8E93"
-  return "label"
+  return darkColor("label")
 }
 
 // ---------- 通用小部件 ----------
@@ -167,12 +191,12 @@ function LockRow({ snapshot, showUpdate = true }: { snapshot: VehicleSnapshot; s
     <HStack
       spacing={5}
       padding={{ horizontal: 6, vertical: 4 }}
-      background={SUB_BG}
+      background={darkColor(SUB_BG)}
       clipShape={{ type: "rect", cornerRadius: 7 }}
     >
       <Image systemName={icon} font={10} foregroundStyle={color as any} />
       <Text font={10} fontWeight="semibold" foregroundStyle={color as any}>{info.text}</Text>
-      {showUpdate ? <Text font={9} foregroundStyle="secondaryLabel">{formatSyncTime(snapshot.vehicleObservedAt)}</Text> : null}
+      {showUpdate ? <Text font={9} foregroundStyle={darkColor("secondaryLabel")}>{formatSyncTime(snapshot.vehicleObservedAt)}</Text> : null}
       <Spacer minLength={0} />
       {snapshot.checks.length > 0 ? (
         <Image systemName="exclamationmark.triangle.fill" font={10} foregroundStyle="#FF9F0A" />
@@ -184,7 +208,7 @@ function LockRow({ snapshot, showUpdate = true }: { snapshot: VehicleSnapshot; s
 function TirePair({ label, tire }: { label: string; tire?: { pressureBar?: number; status?: string } }) {
   return (
     <HStack spacing={3} frame={{ maxWidth: Infinity, alignment: "leading" }}>
-      <Text font={9} foregroundStyle="secondaryLabel">{label}</Text>
+      <Text font={9} foregroundStyle={darkColor("secondaryLabel")}>{label}</Text>
       <Spacer minLength={0} />
       <Text font={10} fontWeight="semibold" foregroundStyle={tirePairColor(tire?.status)}>
         {tire?.pressureBar != null ? tire.pressureBar.toFixed(1) : "—"}
@@ -208,7 +232,7 @@ function AccessoryRectangular({ snapshot, logo }: { snapshot: VehicleSnapshot; l
         <Text font="headline" fontWeight="bold">
           {snapshot.energy.rangeKm != null ? `${snapshot.energy.rangeKm}㎞` : "—㎞"}
         </Text>
-        <Text font="caption2" foregroundStyle="secondaryLabel">{fuelLevelText(snapshot)}</Text>
+        <Text font="caption2" foregroundStyle={darkColor("secondaryLabel")}>{fuelLevelText(snapshot)}</Text>
       </HStack>
       <HStack spacing={4}>
         <Image
@@ -238,7 +262,8 @@ function SmallWidget({ snapshot, car }: { snapshot: VehicleSnapshot; car: UIImag
       padding={12}
       frame={{ maxWidth: Infinity, maxHeight: Infinity, alignment: "topLeading" }}
       widgetURL={deepLink("overview")}
-      widgetBackground={CARD_BG}
+      widgetBackground={widgetContainerBackground()}
+      foregroundStyle={darkColor("label")}
     >
       {/* 第一行：车型 + 右上角锁状态 */}
       <HStack spacing={6}>
@@ -251,7 +276,7 @@ function SmallWidget({ snapshot, car }: { snapshot: VehicleSnapshot; car: UIImag
       {/* 副标题：剩余里程 + 油量/电量，如 500km/35L 或 500km/80% */}
       <HStack spacing={4}>
         <Image systemName={energyIcon(snapshot)} font={9} foregroundStyle={ACCENT} />
-        <Text font="caption" foregroundStyle="secondaryLabel" lineLimit={1} minScaleFactor={0.8}>
+        <Text font="caption" foregroundStyle={darkColor("secondaryLabel")} lineLimit={1} minScaleFactor={0.8}>
           {`${rangeText}/${fuelText}`}
         </Text>
       </HStack>
@@ -261,7 +286,7 @@ function SmallWidget({ snapshot, car }: { snapshot: VehicleSnapshot; car: UIImag
       {/* 右下角：更新时间 */}
       <HStack>
         <Spacer minLength={0} />
-        <Text font={9} foregroundStyle="secondaryLabel">{formatSyncTime(snapshot.vehicleObservedAt)}</Text>
+        <Text font={9} foregroundStyle={darkColor("secondaryLabel")}>{formatSyncTime(snapshot.vehicleObservedAt)}</Text>
       </HStack>
     </VStack>
   )
@@ -273,7 +298,7 @@ function MediumRow({ icon, label, value }: { icon: string; label: string; value:
   return (
     <HStack spacing={4} frame={{ maxWidth: Infinity, alignment: "leading" }}>
       <Image systemName={icon} font={9} foregroundStyle={ACCENT} frame={{ width: 13 }} />
-      <Text font={8} foregroundStyle="secondaryLabel">{label}</Text>
+      <Text font={8} foregroundStyle={darkColor("secondaryLabel")}>{label}</Text>
       <Spacer minLength={0} />
       <Text font={9} fontWeight="semibold" lineLimit={1} minScaleFactor={0.7}>{value}</Text>
     </HStack>
@@ -286,7 +311,7 @@ function StatCard({ icon, value, tone }: { icon: string; value: string; tone?: s
     <HStack spacing={3} frame={{ maxWidth: Infinity, alignment: "leading" }}>
       <Image systemName={icon} font={9} foregroundStyle={ACCENT} frame={{ width: 13 }} />
       <Spacer minLength={0} />
-      <Text font={10} fontWeight="semibold" lineLimit={1} minScaleFactor={0.6} foregroundStyle={(tone ?? "label") as any}>{value}</Text>
+      <Text font={10} fontWeight="semibold" lineLimit={1} minScaleFactor={0.6} foregroundStyle={darkColor(tone ?? "label")}>{value}</Text>
     </HStack>
   )
 }
@@ -324,7 +349,7 @@ function StatusBoard({ snapshot, logo, car, privacy, fill }: {
         </Text>
         <Spacer minLength={0} />
         {snapshot.identity.plate || snapshot.identity.plateMasked ? (
-          <Text font={8} foregroundStyle="secondaryLabel" lineLimit={1} minScaleFactor={0.6}>{snapshot.identity.plate ?? snapshot.identity.plateMasked ?? ""}</Text>
+          <Text font={8} foregroundStyle={darkColor("secondaryLabel")} lineLimit={1} minScaleFactor={0.6}>{snapshot.identity.plate ?? snapshot.identity.plateMasked ?? ""}</Text>
         ) : null}
         <LogoView logo={logo} size={16} />
       </HStack>
@@ -357,21 +382,21 @@ function StatusBoard({ snapshot, logo, car, privacy, fill }: {
             </HStack>
           ) : (settings.noTiresLine1 || settings.noTiresLine2) ? (
             <VStack alignment="leading" spacing={2}>
-              {settings.noTiresLine1 ? <Text font={9} foregroundStyle="secondaryLabel" lineLimit={1}>{settings.noTiresLine1}</Text> : null}
-              {settings.noTiresLine2 ? <Text font={9} foregroundStyle="secondaryLabel" lineLimit={1}>{settings.noTiresLine2}</Text> : null}
+              {settings.noTiresLine1 ? <Text font={9} foregroundStyle={darkColor("secondaryLabel")} lineLimit={1}>{settings.noTiresLine1}</Text> : null}
+              {settings.noTiresLine2 ? <Text font={9} foregroundStyle={darkColor("secondaryLabel")} lineLimit={1}>{settings.noTiresLine2}</Text> : null}
             </VStack>
           ) : null}
           {/* 第五行：定位 */}
           <HStack spacing={3} frame={{ maxWidth: Infinity, alignment: "leading" }}>
-            <Image systemName="location.fill" font={9} foregroundStyle="secondaryLabel" />
-            <Text font={9} foregroundStyle="secondaryLabel" lineLimit={2} frame={{ maxWidth: Infinity, alignment: "leading" }}>{privacy ? "位置已隐藏" : (snapshot.location?.address ?? "位置不可用")}</Text>
+            <Image systemName="location.fill" font={9} foregroundStyle={darkColor("secondaryLabel")} />
+            <Text font={9} foregroundStyle={darkColor("secondaryLabel")} lineLimit={2} frame={{ maxWidth: Infinity, alignment: "leading" }}>{privacy ? "位置已隐藏" : (snapshot.location?.address ?? "位置不可用")}</Text>
           </HStack>
           {/* 弹性空隙：仅 fill（中号）时把最后一行压到底部；大号（紧凑）不需要 */}
           {fill ? <Spacer minLength={0} /> : null}
           {/* 第六行：刷新时间 + 锁车状态 */}
           <HStack spacing={3} frame={{ maxWidth: Infinity, alignment: "leading" }}>
-            <Image systemName="clock.fill" font={9} foregroundStyle="secondaryLabel" />
-            <Text font={9} foregroundStyle="secondaryLabel">{formatSyncTime(snapshot.fetchedAt)}</Text>
+            <Image systemName="clock.fill" font={9} foregroundStyle={darkColor("secondaryLabel")} />
+            <Text font={9} foregroundStyle={darkColor("secondaryLabel")}>{formatSyncTime(snapshot.fetchedAt)}</Text>
             <Spacer minLength={0} />
             <LockBadge snapshot={snapshot} />
           </HStack>
@@ -407,7 +432,8 @@ function MediumWidget({ snapshot, logo, car, privacy }: {
       padding={14}
       frame={{ maxWidth: Infinity, maxHeight: Infinity, alignment: "topLeading" }}
       widgetURL={deepLink("overview")}
-      widgetBackground={CARD_BG}
+      widgetBackground={widgetContainerBackground()}
+      foregroundStyle={darkColor("label")}
     >
       <StatusBoard snapshot={snapshot} logo={logo} car={car} privacy={privacy} fill />
     </VStack>
@@ -423,7 +449,7 @@ function LargeStat({ icon, value, label }: { icon: string; value: string; label:
         <Image systemName={icon} font={9} foregroundStyle={ACCENT} />
         <Text font={10} fontWeight="semibold" lineLimit={1} minScaleFactor={0.7}>{value}</Text>
       </HStack>
-      <Text font={7} foregroundStyle="secondaryLabel">{label}</Text>
+      <Text font={7} foregroundStyle={darkColor("secondaryLabel")}>{label}</Text>
     </VStack>
   )
 }
@@ -431,7 +457,7 @@ function LargeStat({ icon, value, label }: { icon: string; value: string; label:
 function TireCell({ label, tire }: { label: string; tire?: { pressureBar?: number; status?: string } }) {
   return (
     <VStack alignment="leading" spacing={1} frame={{ maxWidth: Infinity, alignment: "leading" }}>
-      <Text font={7} foregroundStyle="secondaryLabel">{label}</Text>
+      <Text font={7} foregroundStyle={darkColor("secondaryLabel")}>{label}</Text>
       <Text font={11} fontWeight="semibold" lineLimit={1} minScaleFactor={0.8} foregroundStyle={tirePairColor(tire?.status)}>
         {tire?.pressureBar != null ? tire.pressureBar.toFixed(1) : "—"}
       </Text>
@@ -463,7 +489,8 @@ function LargeWidget({ snapshot, logo, car, mapImage, privacy }: {
       spacing={0}
       frame={{ maxWidth: Infinity, maxHeight: Infinity, alignment: "topLeading" }}
       widgetURL={deepLink("overview")}
-      widgetBackground={CARD_BG}
+      widgetBackground={widgetContainerBackground()}
+      foregroundStyle={darkColor("label")}
     >
       {/* 模块一：信息（与中号完全一致，固定高度 155） */}
       <VStack spacing={8} padding={14} frame={{ maxWidth: Infinity, height: 155 }}>
@@ -482,10 +509,10 @@ function LargeWidget({ snapshot, logo, car, mapImage, privacy }: {
           alignment="center"
           spacing={4}
           frame={{ maxWidth: Infinity, height: 150 }}
-          background={SUB_BG}
+          background={darkColor(SUB_BG)}
         >
-          <Image systemName={privacy ? "eye.slash.fill" : "map.fill"} font={22} foregroundStyle="secondaryLabel" />
-          <Text font={9} foregroundStyle="secondaryLabel">{privacy ? "地图已隐藏" : "位置不可用"}</Text>
+          <Image systemName={privacy ? "eye.slash.fill" : "map.fill"} font={22} foregroundStyle={darkColor("secondaryLabel")} />
+          <Text font={9} foregroundStyle={darkColor("secondaryLabel")}>{privacy ? "地图已隐藏" : "位置不可用"}</Text>
         </VStack>
       )}
     </VStack>
@@ -562,6 +589,7 @@ async function refreshWidgetSnapshotIfStale(snapshot: VehicleSnapshot): Promise<
 
 async function main() {
   let snapshot = loadWidgetSnapshot()
+  setForceDark(loadSettings().alwaysDarkBackground === true)
   // 组件每 30 分钟刷新一次：快照过旧时自动拉新数据（失败则沿用旧数据）
   if (loadRuntimeMode() === "connected") {
     snapshot = await refreshWidgetSnapshotIfStale(snapshot)

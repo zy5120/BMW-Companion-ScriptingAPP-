@@ -4,6 +4,7 @@ import type { KnownState, LockState, TireState, VehicleCheck, VehicleSnapshot } 
 import { BMW_HEADERS, BMW_HOST, brandUserAgent, COMPAT_HEADERS_X } from "./compat-config"
 import { requestCompatNonce } from "./nonce-provider"
 import { makeSession, type BMWSessionSecrets } from "./session-vault"
+import { applyEnergyOverride } from "./storage"
 
 interface CaptchaChallenge {
   verifyId: string
@@ -455,9 +456,19 @@ function normalizeVehicle(vehicle: RawVehicle, state: Record<string, any>): Vehi
   const fuel = state.combustionFuelLevel
   const level = finiteNumber(electric?.chargingLevelPercent ?? fuel?.remainingFuelPercent)
   const range = finiteNumber(electric?.range ?? fuel?.range)
-  // 驱动类型：优先取车辆列表的显式字段，其次按车况里有没有能源数据推断
+  // 驱动类型：优先取车辆列表的显式字段，其次按车况里有实际数值的能源字段推断。
+  // 注意：接口可能对纯电车也返回一个空的 combustionFuelLevel 对象（{}），
+  // 因此不能只看对象是否存在，要看里面有没有实际数值。
+  const hasElectricData = Boolean(electric && (
+    finiteNumber(electric.chargingLevelPercent) != null || finiteNumber(electric.range) != null
+  ))
+  const hasFuelData = Boolean(fuel && (
+    finiteNumber(fuel.remainingFuelPercent) != null ||
+    finiteNumber(fuel.remainingFuelLiters) != null ||
+    finiteNumber(fuel.range) != null
+  ))
   const explicitType = driveTypeFromProperties(vehicle.properties)
-  const inferredType = electric && fuel ? "hybrid" : electric ? "electric" : fuel ? "fuel" : "unknown"
+  const inferredType = hasElectricData && hasFuelData ? "hybrid" : hasElectricData ? "electric" : hasFuelData ? "fuel" : "unknown"
   const energyType = explicitType !== "unknown" ? explicitType : inferredType
   const doors = state.doorsState ?? {}
   const windows = state.windowsState ?? {}
@@ -701,7 +712,7 @@ export async function fetchFirstVehicleSnapshot(
     },
   })
   if (!stateResponse.state || typeof stateResponse.state !== "object") throw new Error("VEHICLE_STATE_INVALID")
-  const snapshot = normalizeVehicle(vehicle, stateResponse.state)
+  const snapshot = applyEnergyOverride(normalizeVehicle(vehicle, stateResponse.state))
   const consumption = await fetchConsumption(session, vin, snapshot.energy.type, brand)
   if (consumption) {
     snapshot.energy.consumption = consumption.value

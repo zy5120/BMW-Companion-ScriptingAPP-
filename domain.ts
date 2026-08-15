@@ -91,6 +91,10 @@ export interface CompanionSettings {
   savedPhone?: string
   // 已查看过的更新版本号（用于「更新展示」sheet，见 changelog.ts）
   lastSeenVersion?: string
+  // 浅色模式下也强制组件使用深色背景
+  alwaysDarkBackground?: boolean
+  // 手动能源类型覆盖（按 VIN 兑底，key 为 VIN；自动识别失败/有误时用户可手动指定）
+  energyTypeOverrides?: Record<string, "fuel" | "electric" | "hybrid">
 }
 
 export interface WidgetParameter {
