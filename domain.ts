@@ -89,6 +89,8 @@ export interface CompanionSettings {
   customNonceUrl?: string
   // 记住手机号，避免重复输入（仅本机保存）
   savedPhone?: string
+  // 已查看过的更新版本号（用于「更新展示」sheet，见 changelog.ts）
+  lastSeenVersion?: string
 }
 
 export interface WidgetParameter {

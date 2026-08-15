@@ -35,6 +35,7 @@ export const defaultSettings: CompanionSettings = {
   nonceProvider: "qqtlr",
   customNonceUrl: "",
   savedPhone: "",
+  lastSeenVersion: "",
 }
 
 export function loadSettings(): CompanionSettings {

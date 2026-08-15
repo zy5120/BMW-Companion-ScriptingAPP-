@@ -36,6 +36,7 @@ import { BMW_HEADERS, BMW_HOST, brandUserAgent } from "./compat-config"
 import { refreshMapSnapshot } from "./map-snapshot"
 import { loadSession, saveSession } from "./session-vault"
 import type { KnownState, TireState, VehicleSnapshot } from "./domain"
+import { CHANGELOG, CURRENT_VERSION, versionNewer, type VersionNote } from "./changelog"
 import {
   displayAddress,
   formatRelativeTime,
@@ -60,6 +61,9 @@ import {
 const PROJECT_NAME = "BMW MINI Linker"
 const ACCENT = "#166DFF"
 const CARD = "secondarySystemBackground"
+
+// 首页自动刷新冷却：数据在 5 分钟内的不重复自动刷新（手动点刷新不受限制）
+const AUTO_REFRESH_COOLDOWN_MS = 5 * 60_000
 
 // 车况展示按所选车辆品牌切换（BMW / MINI）
 function vehicleBrand(snapshot: VehicleSnapshot): string {
@@ -625,7 +629,7 @@ function SettingsPage() {
         <HStack>
           <Text>版本</Text>
           <Spacer />
-          <Text foregroundStyle="secondaryLabel">0.2.4</Text>
+          <Text foregroundStyle="secondaryLabel">{CURRENT_VERSION}</Text>
         </HStack>
         <HStack>
           <Text>作者</Text>
@@ -742,7 +746,15 @@ function DashboardPage() {
     <ScrollView
       navigationTitle="车况"
       navigationBarTitleDisplayMode="large"
-      onAppear={reloadFromStorage}
+      onAppear={() => {
+        reloadFromStorage()
+        // 每次打开首页自动刷新车况（5 分钟内数据较新则跳过，避免频繁请求）
+        const snapshot = loadSnapshot()
+        const cachedAt = Date.parse(snapshot.cachedAt)
+        if (!Number.isFinite(cachedAt) || Date.now() - cachedAt >= AUTO_REFRESH_COOLDOWN_MS) {
+          void refresh()
+        }
+      }}
       toolbar={{
         topBarLeading: [
           <Button
@@ -882,6 +894,40 @@ function DashboardPage() {
   )
 }
 
+// 更新展示 sheet：版本更新后首次进入插件时弹出，下滑即可关闭
+function UpdateSheet({ notes }: { notes: VersionNote[] }) {
+  return (
+    <VStack
+      spacing={0}
+      alignment="leading"
+      padding={20}
+      frame={{ maxWidth: Infinity, maxHeight: Infinity, alignment: "topLeading" }}
+      presentationDetents={["medium", "large"]}
+      presentationDragIndicator="visible"
+    >
+      <VStack alignment="leading" spacing={3}>
+        <Text font="title2" fontWeight="bold">更新内容</Text>
+        <Text font="caption" foregroundStyle="secondaryLabel">v{CURRENT_VERSION}</Text>
+      </VStack>
+      <ScrollView>
+        <VStack alignment="leading" spacing={16} padding={{ top: 14, bottom: 20 }}>
+          {notes.map(note => (
+            <VStack key={note.version} alignment="leading" spacing={6}>
+              <Text font="headline">v{note.version} · {note.title}</Text>
+              {note.notes.map((line, index) => (
+                <HStack key={index} spacing={8} alignment="firstTextBaseline">
+                  <Text font="caption" foregroundStyle={ACCENT}>•</Text>
+                  <Text font="subheadline" foregroundStyle="secondaryLabel">{line}</Text>
+                </HStack>
+              ))}
+            </VStack>
+          ))}
+        </VStack>
+      </ScrollView>
+    </VStack>
+  )
+}
+
 function RootView() {
   const route = String(Script.queryParameters.route ?? "overview")
   const initial = route === "location"
@@ -889,7 +935,29 @@ function RootView() {
     : route === "status"
       ? <StatusDetailsPage showClose />
       : <DashboardPage />
-  return <NavigationStack>{initial}</NavigationStack>
+  const [showUpdate, setShowUpdate] = useState(false)
+  const lastSeen = loadSettings().lastSeenVersion ?? ""
+  useEffect(() => {
+    if (!lastSeen || versionNewer(CURRENT_VERSION, lastSeen)) setShowUpdate(true)
+  }, [])
+  const unseenNotes = CHANGELOG.filter(note => !lastSeen || versionNewer(note.version, lastSeen))
+  const closeUpdate = (visible: boolean) => {
+    setShowUpdate(visible)
+    if (!visible) {
+      saveSettings({ ...loadSettings(), lastSeenVersion: CURRENT_VERSION })
+    }
+  }
+  return (
+    <NavigationStack
+      sheet={{
+        isPresented: showUpdate,
+        onChanged: closeUpdate,
+        content: <UpdateSheet notes={unseenNotes} />,
+      }}
+    >
+      {initial}
+    </NavigationStack>
+  )
 }
 
 async function main() {
