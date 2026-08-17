@@ -1,5 +1,5 @@
 // 版本号与更新日志（用于「更新展示」sheet 与设置页版本号）
-export const CURRENT_VERSION = "0.2.8"
+export const CURRENT_VERSION = "0.2.9"
 
 export interface VersionNote {
   version: string
@@ -10,6 +10,13 @@ export interface VersionNote {
 // 按新→旧排列，最多保留近 5 条（slice 兜底，超出自动截断；发版时也建议删除最旧条目）。
 // 新增版本时在顶部加一条，并把 CURRENT_VERSION 同步更新。
 export const CHANGELOG: VersionNote[] = [
+  {
+    version: "0.2.9",
+    title: "大号小组件地图同步深色",
+    notes: [
+      "大号组件底部地图随系统深浅色/深色开关显示深色地图",
+    ],
+  },
   {
     version: "0.2.8",
     title: "优化车辆类型识别逻辑",

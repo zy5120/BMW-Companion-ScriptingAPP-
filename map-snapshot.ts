@@ -1,5 +1,5 @@
 import { Widget } from "scripting"
-import { scriptKeyNamespace } from "./storage"
+import { loadSettings, scriptKeyNamespace } from "./storage"
 
 // 桌面大号组件使用的地图快照路径（App Group 共享目录，组件可读）；
 // 文件名带脚本命名空间，多脚本各自使用自己的地图文件。
@@ -16,6 +16,8 @@ export async function refreshMapSnapshot(
   size = { width: 620, height: 440 },
 ): Promise<boolean> {
   try {
+    // 地图外观跟随深浅色：系统深色模式或开启「浅色模式也显示深色背景」时用深色地图
+    const dark = loadSettings().alwaysDarkBackground === true || Device.colorScheme === "dark"
     const snap = await MapSnapshotter.take({
       region: {
         center: { latitude, longitude },
@@ -23,6 +25,7 @@ export async function refreshMapSnapshot(
       },
       size,
       mapStyle: { style: "standard", showsTraffic: false },
+      appearance: dark ? "dark" : "light",
       annotations: [
         {
           coordinate: { latitude, longitude },
