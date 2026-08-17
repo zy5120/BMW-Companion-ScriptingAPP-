@@ -1,5 +1,5 @@
 // 版本号与更新日志（用于「更新展示」sheet 与设置页版本号）
-export const CURRENT_VERSION = "0.2.9"
+export const CURRENT_VERSION = "0.2.10"
 
 export interface VersionNote {
   version: string
@@ -10,6 +10,15 @@ export interface VersionNote {
 // 按新→旧排列，最多保留近 5 条（slice 兜底，超出自动截断；发版时也建议删除最旧条目）。
 // 新增版本时在顶部加一条，并把 CURRENT_VERSION 同步更新。
 export const CHANGELOG: VersionNote[] = [
+  {
+    version: "0.2.10",
+    title: "地图居中、MINI 图标与定位两行",
+    notes: [
+      "车况页地图在车辆换位置后自动居中",
+      "MINI 车辆在组件中显示 MINI 图标",
+      "组件定位地址支持两行显示（中号/大号）",
+    ],
+  },
   {
     version: "0.2.9",
     title: "大号小组件地图同步深色",

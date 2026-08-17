@@ -30,6 +30,7 @@ import {
 
 const ACCENT = "#166DFF"
 const LOGO_URL = "https://m.qqtlr.com/logo.png"
+const MINI_LOGO_URL = "https://upload.wikimedia.org/wikipedia/commons/thumb/e/e9/MINI_logo.svg/330px-MINI_logo.svg.png"
 const CARD_BG = { light: "#F6F8FC", dark: "#111827" } as any
 const SUB_BG = "tertiarySystemBackground"
 
@@ -389,7 +390,7 @@ function StatusBoard({ snapshot, logo, car, privacy, fill }: {
           {/* 第五行：定位 */}
           <HStack spacing={3} frame={{ maxWidth: Infinity, alignment: "leading" }}>
             <Image systemName="location.fill" font={9} foregroundStyle={darkColor("secondaryLabel")} />
-            <Text font={9} foregroundStyle={darkColor("secondaryLabel")} lineLimit={2} frame={{ maxWidth: Infinity, alignment: "leading" }}>{privacy ? "位置已隐藏" : (snapshot.location?.address ?? "位置不可用")}</Text>
+            <Text font={9} foregroundStyle={darkColor("secondaryLabel")} lineLimit={2} frame={{ maxWidth: Infinity, height: 22, alignment: "leading" }}>{privacy ? "位置已隐藏" : (snapshot.location?.address ?? "位置不可用")}</Text>
           </HStack>
           {/* 弹性空隙：仅 fill（中号）时把最后一行压到底部；大号（紧凑）不需要 */}
           {fill ? <Spacer minLength={0} /> : null}
@@ -492,8 +493,8 @@ function LargeWidget({ snapshot, logo, car, mapImage, privacy }: {
       widgetBackground={widgetContainerBackground()}
       foregroundStyle={darkColor("label")}
     >
-      {/* 模块一：信息（与中号完全一致，固定高度 155） */}
-      <VStack spacing={8} padding={14} frame={{ maxWidth: Infinity, height: 155 }}>
+      {/* 模块一：信息（与中号完全一致；高度 162 容纳两行地址，地图高度仍为 150 不变） */}
+      <VStack spacing={8} padding={14} frame={{ maxWidth: Infinity, height: 162 }}>
         <StatusBoard snapshot={snapshot} logo={logo} car={car} privacy={privacy} fill />
       </VStack>
 
@@ -548,10 +549,12 @@ async function loadMapImage(): Promise<UIImage | null> {
   }
 }
 
-async function loadLogo(): Promise<UIImage | null> {
+async function loadLogo(brand: "BMW" | "MINI" = "BMW"): Promise<UIImage | null> {
   try {
+    // 按品牌加载对应 logo：MINI 用 MINI 图标，其余用 BMW
+    const url = brand === "MINI" ? MINI_LOGO_URL : LOGO_URL
     const image = await Promise.race([
-      UIImage.fromURL(LOGO_URL),
+      UIImage.fromURL(url),
       new Promise<null>(resolve => setTimeout(() => resolve(null), 3000)),
     ])
     return image
@@ -597,7 +600,7 @@ async function main() {
   const parameter = parseWidgetParameter(Widget.parameter)
   const privacy = resolvePrivacy(parameter, loadSettings())
   const family = Widget.family
-  const logo = await loadLogo()
+  const logo = await loadLogo(snapshot.identity.brand?.toLowerCase() === "mini" ? "MINI" : "BMW")
   // 小/中/大号都需要车辆图；大号顶部与中号一致，底部为地图快照
   const needsCar = family === "systemSmall" || family === "systemMedium" || family === "systemLarge" || family === "systemExtraLarge"
   const car = needsCar ? await fetchOfficialCarImage(snapshot) : null

@@ -698,6 +698,15 @@ function LocationMapCard({ snapshot }: { snapshot: VehicleSnapshot }) {
       span: { latitudeDelta: 0.002, longitudeDelta: 0.002 },
     }),
   )
+  // 车辆位置变化后重新居中视角，避免首次刷新地图还停在旧位置
+  useEffect(() => {
+    camera.setValue(
+      MapCameraPosition.region({
+        center,
+        span: { latitudeDelta: 0.002, longitudeDelta: 0.002 },
+      }),
+    )
+  }, [snapshot.location?.latitude, snapshot.location?.longitude])
   const bounds = MapCameraBounds.centerCoordinateBounds(
     { center, span: { latitudeDelta: 0.001, longitudeDelta: 0.001 } },
     { minimumDistance: 200, maximumDistance: 250 },
