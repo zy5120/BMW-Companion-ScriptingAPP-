@@ -343,6 +343,14 @@ function tire(
   return { pressureBar, targetBar, status: warning ? "warning" : "normal" }
 }
 
+// 低级别（LOW/MEDIUM）checkControlMessages 里，只有保养/机油类才同步显示（车机会提示），
+// 其余类型（胎压等）仅高级别告警才显示，避免误报。
+const MAINTENANCE_CHECK_TYPES = new Set([
+  "ENGINE_OIL", "OIL_SERVICE", "SERVICE", "BRAKE_FLUID", "COOLANT", "COOLANT_LEVEL",
+  "WASHER_FLUID", "WASHER_WATER", "BATTERY", "EMISSION", "EMISSION_CHECK", "EXHAUST",
+  "AIR_FILTER", "SPARK_PLUG", "ADBLUE", "DPF", "PARTICLE_FILTER", "VEHICLE_CHECK",
+])
+
 const CHECK_TYPE_LABELS: Record<string, string> = {
   TIRE_PRESSURE: "胎压",
   ENGINE_OIL: "机油",
@@ -408,6 +416,8 @@ function checkTitle(item: any): string {
   const type = String(item?.type ?? "").trim().toUpperCase()
   const typeLabel = CHECK_TYPE_LABELS[type] ?? (type || "车辆")
   const severity = String(item?.severity ?? "").trim().toUpperCase()
+  // 机油 LOW 通知通常指「机油保养」（车机提示保养/超里程），不是油量过低
+  if (type === "ENGINE_OIL" && ["LOW", "LOWEST"].includes(severity)) return "机油需要保养"
   if (["LOW", "LOWEST"].includes(severity)) return `${typeLabel}过低`
   if (["HIGH", "HIGHEST"].includes(severity)) return `${typeLabel}过高`
   if (["MEDIUM", "MIDDLE"].includes(severity)) return `${typeLabel}异常`
@@ -420,6 +430,8 @@ function checkDetail(item: any): string | undefined {
   const type = String(item?.type ?? "").trim().toUpperCase()
   const typeLabel = CHECK_TYPE_LABELS[type] ?? type
   const severity = String(item?.severity ?? "").trim().toUpperCase()
+  // 机油 LOW 通知：与标题一致，提示保养
+  if (type === "ENGINE_OIL" && ["LOW", "LOWEST"].includes(severity)) return "请尽快安排机油保养"
   const severityLabel =
     ["LOW", "LOWEST"].includes(severity) ? "过低" :
     ["HIGH", "HIGHEST"].includes(severity) ? "过高" :
@@ -475,17 +487,24 @@ function normalizeVehicle(
   const doors = state.doorsState ?? {}
   const windows = state.windowsState ?? {}
   const roof = state.roofState ?? {}
-  // BMW 接口的 checkControlMessages 多为 LOW/MEDIUM 级信息（宝马 App 并不提示），
-  // 只保留 HIGH/HIGHEST/CRITICAL 级别的真实告警，避免与 App 实际状态矛盾。
+  // 车机通知同步到「需要关注」：高级别告警全部显示；
+  // 低级别只显示保养/机油类（车机确实会提示的），避免胎压等无关 LOW 消息误报。
   const rawChecks = Array.isArray(state.checkControlMessages) ? state.checkControlMessages : []
-  const criticalChecks = rawChecks.filter(item =>
-    ["HIGH", "HIGHEST", "CRITICAL"].includes(String(item?.severity ?? "").trim().toUpperCase()))
-  const checks: VehicleCheck[] = criticalChecks.slice(0, 20).map((item: any, index: number) => ({
-    id: String(item?.id ?? item?.type ?? `bmw-check-${index}`),
-    severity: checkSeverity(item),
-    title: checkTitle(item),
-    detail: checkDetail(item),
-  }))
+  const checks: VehicleCheck[] = rawChecks
+    .filter(item => {
+      const severity = String(item?.severity ?? "").trim().toUpperCase()
+      const type = String(item?.type ?? item?.id ?? "").trim().toUpperCase()
+      if (["HIGH", "HIGHEST", "CRITICAL"].includes(severity)) return true
+      if (["MEDIUM", "MIDDLE"].includes(severity)) return true
+      return MAINTENANCE_CHECK_TYPES.has(type)
+    })
+    .slice(0, 20)
+    .map((item: any, index: number) => ({
+      id: String(item?.id ?? item?.type ?? `bmw-check-${index}`),
+      severity: checkSeverity(item),
+      title: checkTitle(item),
+      detail: checkDetail(item),
+    }))
   // BMW 接口通常不把「油量低」作为 checkControlMessage 返回，本地按油量阈值补一条，
   // 让「需要关注」如实反映油量过低（油车/混动且油量 < 10%）。
   if (!electric && level != null && level < 10 &&
@@ -497,9 +516,12 @@ function normalizeVehicle(
       detail: `当前油量 ${Math.round(level)}%，建议尽快加油`,
     })
   }
-  // 胎压只跟随 HIGH 级以上官方检查（LOW 级是信息提示，宝马 App 不告警）
-  const pressureLow = criticalChecks.some(item =>
-    String(item?.type ?? item?.id ?? "").toUpperCase().includes("TIRE_PRESSURE"))
+  // 胎压状态只跟随高级别胎压告警（LOW 级是信息提示，车机不告警，避免误标）
+  const pressureLow = rawChecks.some(item => {
+    const severity = String(item?.severity ?? "").trim().toUpperCase()
+    return ["HIGH", "HIGHEST", "CRITICAL"].includes(severity) &&
+      String(item?.type ?? item?.id ?? "").toUpperCase().includes("TIRE_PRESSURE")
+  })
   const tireRaw = state.tireState as Record<string, any> | undefined
   const tires = tireRaw ? {
     frontLeft: tire(tireRaw.frontLeft, { officialLow: pressureLow }),
@@ -562,6 +584,71 @@ function normalizeVehicle(
     cachedAt: now,
     source: "network",
   }
+}
+
+export interface MaintenanceItem {
+  type: string
+  name: string
+  dateTime?: string
+  mileageKm?: number
+  status: string
+}
+
+// 拉取保养计划（CBS）：eadrax-seamlead/api/v1/demands 的 cbs 数组
+async function fetchMaintenance(
+  session: BMWSessionSecrets,
+  vin: string,
+  brand: "BMW" | "MINI",
+): Promise<MaintenanceItem[]> {
+  try {
+    const response = await requestJSON<{ cbs?: Array<Record<string, any>> }>(
+      "/eadrax-seamlead/api/v1/demands",
+      {
+        method: "GET",
+        headers: {
+          authorization: `Bearer ${session.accessToken}`,
+          "bmw-vin": vin,
+          "x-user-agent": brandUserAgent(brand),
+        },
+      },
+    )
+    const cbs = Array.isArray(response?.cbs) ? response.cbs : []
+    return cbs.map(item => ({
+      type: typeof item.type === "string" ? item.type : "",
+      name: typeof item.name === "string" ? item.name : item.type,
+      dateTime: typeof item.dateTime === "string" ? item.dateTime : undefined,
+      mileageKm: finiteNumber(item.mileage),
+      status: typeof item.status === "string" ? item.status : "",
+    }))
+  } catch {
+    return []
+  }
+}
+
+// 把「即将到期/已到期」的保养项转成「需要关注」条目：
+// 到期日期在 30 天内（含已过期），或剩余里程 ≤500km 视为临近。
+function buildMaintenanceChecks(items: MaintenanceItem[]): VehicleCheck[] {
+  const now = Date.now()
+  const checks: VehicleCheck[] = []
+  for (const item of items) {
+    const dueAt = item.dateTime ? Date.parse(item.dateTime) : NaN
+    const daysLeft = Number.isFinite(dueAt) ? (dueAt - now) / 86_400_000 : null
+    const nearByDate = daysLeft != null && daysLeft <= 30
+    const nearByMileage = item.mileageKm != null && item.mileageKm >= 0 && item.mileageKm <= 500
+    if (!nearByDate && !nearByMileage) continue
+    const overdue = daysLeft != null && daysLeft < 0
+    const title = overdue ? `${item.name}已到期` : `${item.name}即将到期`
+    const detailParts: string[] = []
+    if (item.dateTime) detailParts.push(`最迟 ${item.dateTime.slice(0, 10)}`)
+    if (item.mileageKm != null) detailParts.push(`剩余 ${item.mileageKm} km`)
+    checks.push({
+      id: `MAINTENANCE_${item.type || "ITEM"}`,
+      severity: overdue ? "critical" : "warning",
+      title,
+      detail: detailParts.length ? detailParts.join(" · ") : undefined,
+    })
+  }
+  return checks
 }
 
 interface ConsumptionInfo {
@@ -722,6 +809,12 @@ export async function fetchFirstVehicleSnapshot(
   if (consumption) {
     snapshot.energy.consumption = consumption.value
     snapshot.energy.consumptionUnit = consumption.unit
+  }
+  // 保养提醒：即将到期/已到期的 CBS 保养项加入「需要关注」
+  const maintenance = await fetchMaintenance(session, vin, brand)
+  const maintenanceChecks = buildMaintenanceChecks(maintenance)
+  if (maintenanceChecks.length > 0) {
+    snapshot.checks = [...snapshot.checks, ...maintenanceChecks]
   }
   return snapshot
 }

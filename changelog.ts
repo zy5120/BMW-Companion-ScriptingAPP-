@@ -1,5 +1,5 @@
 // 版本号与更新日志（用于「更新展示」sheet 与设置页版本号）
-export const CURRENT_VERSION = "0.2.10"
+export const CURRENT_VERSION = "0.2.11"
 
 export interface VersionNote {
   version: string
@@ -10,6 +10,14 @@ export interface VersionNote {
 // 按新→旧排列，最多保留近 5 条（slice 兜底，超出自动截断；发版时也建议删除最旧条目）。
 // 新增版本时在顶部加一条，并把 CURRENT_VERSION 同步更新。
 export const CHANGELOG: VersionNote[] = [
+  {
+    version: "0.2.11",
+    title: "同步车机通知与保养提醒",
+    notes: [
+      "车机提示的保养/机油通知同步到「需要关注」",
+      "即将到期的保养（CBS）自动提醒",
+    ],
+  },
   {
     version: "0.2.10",
     title: "地图居中、MINI 图标与定位两行",
