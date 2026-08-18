@@ -1,5 +1,5 @@
 // 版本号与更新日志（用于「更新展示」sheet 与设置页版本号）
-export const CURRENT_VERSION = "0.2.15"
+export const CURRENT_VERSION = "0.3.0"
 
 export interface VersionNote {
   version: string
@@ -10,6 +10,15 @@ export interface VersionNote {
 // 按新→旧排列，最多保留近 5 条（slice 兜底，超出自动截断；发版时也建议删除最旧条目）。
 // 新增版本时在顶部加一条，并把 CURRENT_VERSION 同步更新。
 export const CHANGELOG: VersionNote[] = [
+  {
+    version: "0.3.0",
+    title: "未连接车辆提示与能源字段优化",
+    notes: [
+      "选择未开通互联驾驶的车辆时给出提示",
+      "纯电车型显示充电目标并细化充电状态",
+      "组件门窗状态优化：两门/四门自适应",
+    ],
+  },
   {
     version: "0.2.15",
     title: "锁车状态统一与组件门窗提醒",

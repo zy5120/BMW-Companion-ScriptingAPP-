@@ -72,19 +72,26 @@ function doorWindowStatus(snapshot: VehicleSnapshot): { safe: boolean; text: str
   const a = snapshot.access
   const doors = a.doorStates
   const windows = a.windowStates
+  // 先判断两门/四门：车门后排（左后/右后）都 unknown → 两门车；只有两门车才忽略后排
+  const twoDoorDoors = Boolean(doors && doors.leftRear === "unknown" && doors.rightRear === "unknown")
+  const twoDoorWindows = Boolean(windows && windows.leftRear === "unknown" && windows.rightRear === "unknown")
   const doorOpen: string[] = []
   const windowOpen: string[] = []
   if (doors) {
     if (doors.leftFront === "open") doorOpen.push("左前车门")
     if (doors.rightFront === "open") doorOpen.push("右前车门")
-    if (doors.leftRear === "open") doorOpen.push("左后车门")
-    if (doors.rightRear === "open") doorOpen.push("右后车门")
+    if (!twoDoorDoors) {
+      if (doors.leftRear === "open") doorOpen.push("左后车门")
+      if (doors.rightRear === "open") doorOpen.push("右后车门")
+    }
   }
   if (windows) {
     if (windows.leftFront === "open") windowOpen.push("左前车窗")
     if (windows.rightFront === "open") windowOpen.push("右前车窗")
-    if (windows.leftRear === "open") windowOpen.push("左后车窗")
-    if (windows.rightRear === "open") windowOpen.push("右后车窗")
+    if (!twoDoorWindows) {
+      if (windows.leftRear === "open") windowOpen.push("左后车窗")
+      if (windows.rightRear === "open") windowOpen.push("右后车窗")
+    }
   }
   const messages: string[] = []
   if (doorOpen.length === 1) messages.push(`${doorOpen[0]}未关闭`)
@@ -97,9 +104,10 @@ function doorWindowStatus(snapshot: VehicleSnapshot): { safe: boolean; text: str
     if (a.doors === "open" || a.windows === "open") return { safe: false, text: "有门窗未关闭" }
     if (a.doors === "unknown" && a.windows === "unknown") return { safe: false, text: "门窗状态未知" }
   }
+  // 部分未知：两门车只看前排，四门车前排/后排都算
   const hasUnknown =
-    (doors ? (doors.leftFront === "unknown" || doors.rightFront === "unknown" || doors.leftRear === "unknown" || doors.rightRear === "unknown") : false) ||
-    (windows ? (windows.leftFront === "unknown" || windows.rightFront === "unknown" || windows.leftRear === "unknown" || windows.rightRear === "unknown") : false)
+    (doors ? (doors.leftFront === "unknown" || doors.rightFront === "unknown" || (!twoDoorDoors && (doors.leftRear === "unknown" || doors.rightRear === "unknown"))) : false) ||
+    (windows ? (windows.leftFront === "unknown" || windows.rightFront === "unknown" || (!twoDoorWindows && (windows.leftRear === "unknown" || windows.rightRear === "unknown"))) : false)
   if (hasUnknown) return { safe: false, text: "部分门窗状态未知" }
   return { safe: true, text: "门窗均已关闭" }
 }

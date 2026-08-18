@@ -527,6 +527,14 @@ function normalizeVehicle(
       }
     : undefined
 
+  // 充电状态细化：按连接状态 + 接口 chargingStatus 判断（未连接/充电中/已充满）
+function chargingState(electric: Record<string, any>): "charging" | "complete" | "disconnected" | "unknown" {
+  const status = String(electric.chargingStatus ?? "").toUpperCase()
+  if (status === "FINISHED" || status === "CHARGING_FULLY_CHARGED" || status === "FULLY_CHARGED") return "complete"
+  if (electric.isChargerConnected === true || status === "CHARGING") return "charging"
+  return "disconnected"
+}
+
   return {
     schemaVersion: 1,
     localVehicleId: `bmw-${Crypto.sha256(dataFromString(vin)).toHexString().slice(0, 12)}`,
@@ -568,8 +576,9 @@ function normalizeVehicle(
     },
     tires,
     charging: electric ? {
-      state: electric.isChargerConnected ? "charging" : "disconnected",
+      state: chargingState(electric),
       estimatedCompletionAt: typeof electric.chargingEndTime === "string" ? electric.chargingEndTime : undefined,
+      targetPercent: finiteNumber(electric.chargingTarget),
     } : undefined,
     location,
     checks,
@@ -719,14 +728,23 @@ export interface VehicleListItem {
   brand: "BMW" | "MINI"
   model: string
   licensePlate?: string
+  // 是否已开通互联驾驶（未开通的车辆无法获取车况，选择时需提示）
+  connected: boolean
 }
 
 // 同时拉取宝马和 MINI 的车辆条目（x-user-agent 品牌标识决定接口返回哪个品牌）
 async function fetchVehicleEntries(
   session: BMWSessionSecrets,
   brand: "BMW" | "MINI",
-): Promise<Array<{ vin: string; brand: "BMW" | "MINI"; vehicle: RawVehicle }>> {
-  const vehicles = await requestJSON<{ mappingInfos?: Array<{ vin?: unknown; cnData?: RawVehicle }> }>(
+): Promise<Array<{ vin: string; brand: "BMW" | "MINI"; vehicle: RawVehicle; connected: boolean }>> {
+  const vehicles = await requestJSON<{
+    mappingInfos?: Array<{
+      vin?: unknown
+      cnData?: RawVehicle
+      isAssociated?: unknown
+      vehicleMappingType?: unknown
+    }>
+  }>(
     "/eadrax-vcs/v5/vehicle-list?",
     {
       method: "POST",
@@ -737,15 +755,17 @@ async function fetchVehicleEntries(
       body: "{}",
     },
   )
-  const entries: Array<{ vin: string; brand: "BMW" | "MINI"; vehicle: RawVehicle }> = []
+  const entries: Array<{ vin: string; brand: "BMW" | "MINI"; vehicle: RawVehicle; connected: boolean }> = []
   for (const entry of vehicles.mappingInfos ?? []) {
     const cn = entry.cnData ?? (entry as RawVehicle | undefined)
     const vin = typeof entry?.vin === "string" ? entry.vin : typeof cn?.vin === "string" ? cn.vin : ""
     if (!vin) continue
+    const connected = entry.isAssociated === true && entry.vehicleMappingType === "CONNECTED"
     entries.push({
       vin,
       brand,
       vehicle: cn ? { ...cn, vin } : ({ ...(entry as RawVehicle), vin } as RawVehicle),
+      connected,
     })
   }
   return entries
@@ -765,6 +785,7 @@ export async function fetchVehicleList(session: BMWSessionSecrets): Promise<Vehi
         brand: entry.brand,
         model: typeof entry.vehicle.model === "string" ? entry.vehicle.model : "",
         licensePlate: typeof entry.vehicle.licensePlate === "string" ? entry.vehicle.licensePlate : undefined,
+        connected: entry.connected,
       })
     }
   }

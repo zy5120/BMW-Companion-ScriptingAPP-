@@ -73,6 +73,8 @@ export interface VehicleSnapshot {
   charging?: {
     state: ChargingState
     estimatedCompletionAt?: string
+    // 充电目标电量（%），纯电/混动接口返回（如 80）
+    targetPercent?: number
   }
   location?: {
     latitude: number

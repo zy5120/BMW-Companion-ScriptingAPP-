@@ -40,6 +40,10 @@ const ACCENT = "#166DFF"
 // 运行时只提供全局 Dialog 对象（prototype 上有 alert/confirm/prompt/actionSheet），
 // 并不存在全局 confirm 函数（类型声明有但运行时为 undefined）。
 declare const Dialog: {
+  alert(options: {
+    title?: string
+    message: string
+  }): Promise<void>
   confirm(options: {
     title?: string
     message: string
@@ -157,6 +161,15 @@ export function ConnectionPage() {
     const session = loadSession()
     if (!session) {
       setStatus("请先登录后再切换车辆")
+      return
+    }
+    // 未开通互联驾驶的车辆无法获取车况，弹出提示
+    const target = vehicles.find(item => item.vin.toUpperCase() === vin.toUpperCase())
+    if (target && !target.connected) {
+      await Dialog.alert({
+        title: "无法连接该车辆",
+        message: `${target.brand} ${target.model}${target.licensePlate ? `（${target.licensePlate}）` : ""}未开通宝马互联驾驶服务，无法获取车况数据。\n\n请先在 My BMW 官方应用中绑定该车辆后重试。`,
+      })
       return
     }
     const previous = selectedVin
@@ -315,7 +328,7 @@ export function ConnectionPage() {
             >
               {vehicles.map(item => (
                 <Text key={item.vin} tag={item.vin}>
-                  {item.brand} {item.model}{item.licensePlate ? ` · ${item.licensePlate}` : ""}
+                  {item.brand} {item.model}{item.licensePlate ? ` · ${item.licensePlate}` : ""}{!item.connected ? "（未连接）" : ""}
                 </Text>
               ))}
             </Picker>

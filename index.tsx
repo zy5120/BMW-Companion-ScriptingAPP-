@@ -248,20 +248,27 @@ async function fetchOfficialCarImage(snapshot: VehicleSnapshot): Promise<UIImage
 function doorWindowSummary(snapshot: VehicleSnapshot): string {
   const doors = snapshot.access.doorStates
   const windows = snapshot.access.windowStates
-  const doorLabels: Array<[KnownState, string]> = doors ? [
-    [doors.leftFront, "左前车门"],
-    [doors.rightFront, "右前车门"],
-    [doors.leftRear, "左后车门"],
-    [doors.rightRear, "右后车门"],
-  ] : []
-  const windowLabels: Array<[KnownState, string]> = windows ? [
-    [windows.leftFront, "左前车窗"],
-    [windows.rightFront, "右前车窗"],
-    [windows.leftRear, "左后车窗"],
-    [windows.rightRear, "右后车窗"],
-  ] : []
-  const doorOpen = doorLabels.filter(([state]) => state === "open").map(([, label]) => label)
-  const windowOpen = windowLabels.filter(([state]) => state === "open").map(([, label]) => label)
+  // 先判断两门/四门：车门后排（左后/右后）都 unknown → 两门车；只有两门车才忽略后排
+  const twoDoorDoors = Boolean(doors && doors.leftRear === "unknown" && doors.rightRear === "unknown")
+  const twoDoorWindows = Boolean(windows && windows.leftRear === "unknown" && windows.rightRear === "unknown")
+  const doorOpen: string[] = []
+  const windowOpen: string[] = []
+  if (doors) {
+    if (doors.leftFront === "open") doorOpen.push("左前车门")
+    if (doors.rightFront === "open") doorOpen.push("右前车门")
+    if (!twoDoorDoors) {
+      if (doors.leftRear === "open") doorOpen.push("左后车门")
+      if (doors.rightRear === "open") doorOpen.push("右后车门")
+    }
+  }
+  if (windows) {
+    if (windows.leftFront === "open") windowOpen.push("左前车窗")
+    if (windows.rightFront === "open") windowOpen.push("右前车窗")
+    if (!twoDoorWindows) {
+      if (windows.leftRear === "open") windowOpen.push("左后车窗")
+      if (windows.rightRear === "open") windowOpen.push("右后车窗")
+    }
+  }
   const messages: string[] = []
   if (doorOpen.length === 1) messages.push(`${doorOpen[0]}未关闭`)
   else if (doorOpen.length > 1) messages.push("多个车门未关闭")
@@ -273,8 +280,10 @@ function doorWindowSummary(snapshot: VehicleSnapshot): string {
     if (snapshot.access.doors === "open" || snapshot.access.windows === "open") return "有门窗未关闭"
     if (snapshot.access.doors === "unknown" && snapshot.access.windows === "unknown") return "门窗状态未知"
   }
-  const hasUnknown = doorLabels.some(([state]) => state === "unknown") ||
-    windowLabels.some(([state]) => state === "unknown")
+  // 部分未知：两门车只看前排，四门车前排/后排都算
+  const hasUnknown =
+    (doors ? (doors.leftFront === "unknown" || doors.rightFront === "unknown" || (!twoDoorDoors && (doors.leftRear === "unknown" || doors.rightRear === "unknown"))) : false) ||
+    (windows ? (windows.leftFront === "unknown" || windows.rightFront === "unknown" || (!twoDoorWindows && (windows.leftRear === "unknown" || windows.rightRear === "unknown"))) : false)
   if (hasUnknown) return "部分门窗状态未知"
   return "门窗均已关闭"
 }
@@ -553,6 +562,14 @@ function StatusDetailsPage({ showClose = false }: { showClose?: boolean }) {
             <Text>充电状态</Text>
             <Spacer />
             <Text font="caption" foregroundStyle="secondaryLabel">{snapshot.charging.state === "charging" ? "充电中" : snapshot.charging.state === "complete" ? "已充满" : snapshot.charging.state === "disconnected" ? "未连接" : "未知"}</Text>
+          </HStack>
+        ) : null}
+        {snapshot.charging && snapshot.charging.targetPercent != null ? (
+          <HStack spacing={10} padding={{ vertical: 7 }}>
+            <Image systemName="target" font="body" foregroundStyle={ACCENT} frame={{ width: 24 }} />
+            <Text>充电目标</Text>
+            <Spacer />
+            <Text font="caption" foregroundStyle="secondaryLabel">{snapshot.charging.targetPercent}%</Text>
           </HStack>
         ) : null}
       </Section>
