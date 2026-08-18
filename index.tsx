@@ -44,7 +44,7 @@ import {
   freshnessColor,
   freshnessLabel,
   knownStateLabel,
-  lockLabel,
+  lockInfo,
   safetySummary,
 } from "./formatters"
 import {
@@ -456,7 +456,7 @@ function StatusDetailsPage({ showClose = false }: { showClose?: boolean }) {
           />
           <Text font="headline" lineLimit={1} minScaleFactor={0.7}>{safety.text}</Text>
           <Spacer />
-          <Text foregroundStyle="secondaryLabel">{lockLabel(snapshot.access.lock)}</Text>
+          <Text foregroundStyle="secondaryLabel">{lockInfo(snapshot).text}</Text>
         </HStack>
       </Section>
       <Section header={<Text font="headline">车门</Text>}>
@@ -987,7 +987,7 @@ function DashboardPage() {
             <MetricCard
               icon={snapshot.access.lock === "locked" ? "lock.shield.fill" : "lock.open.fill"}
               title="车辆安全"
-              value={lockLabel(snapshot.access.lock)}
+              value={lockInfo(snapshot).text}
               subtitle={doorWindowSummary(snapshot)}
               tint={safety.safe ? "#30D158" : "#FF9F0A"}
             />

@@ -13,7 +13,7 @@ import {
 import type { VehicleSnapshot } from "./domain"
 import { fetchFirstVehicleSnapshot, renewSession } from "./bmw-client"
 import { BMW_HEADERS, BMW_HOST, brandUserAgent } from "./compat-config"
-import { formatSyncTime } from "./formatters"
+import { formatSyncTime, lockInfo } from "./formatters"
 import { refreshMapSnapshot } from "./map-snapshot"
 import { loadSession, saveSession } from "./session-vault"
 import {
@@ -67,23 +67,41 @@ function deepLink(route: "overview" | "status" | "location"): string {
 
 // ---------- 通用展示小工具 ----------
 
-function lockInfo(snapshot: VehicleSnapshot): { text: string; locked: boolean; unknown: boolean } {
-  if (snapshot.access.lock === "unknown") return { text: "锁车状态未知", locked: false, unknown: true }
-  const locked = snapshot.access.lock === "locked"
-  return { text: locked ? "已上锁" : "已解锁", locked, unknown: false }
-}
-
+// 只考虑车门/车窗状态（与车况页锁车卡片副标题逻辑一致），不判断锁车
 function doorWindowStatus(snapshot: VehicleSnapshot): { safe: boolean; text: string } {
   const a = snapshot.access
-  if (a.lock === "unknown") return { safe: false, text: "状态未知" }
-  if (a.lock !== "locked") return { safe: false, text: "已解锁" }
-  if (a.doors === "closed" && a.windows === "closed") {
-    if (a.roof === "open") return { safe: false, text: "天窗未关闭" }
-    if (a.hood === "open") return { safe: false, text: "引擎盖打开" }
-    if (a.trunk === "open") return { safe: false, text: "后备箱打开" }
-    return { safe: true, text: "门窗已关闭" }
+  const doors = a.doorStates
+  const windows = a.windowStates
+  const doorOpen: string[] = []
+  const windowOpen: string[] = []
+  if (doors) {
+    if (doors.leftFront === "open") doorOpen.push("左前车门")
+    if (doors.rightFront === "open") doorOpen.push("右前车门")
+    if (doors.leftRear === "open") doorOpen.push("左后车门")
+    if (doors.rightRear === "open") doorOpen.push("右后车门")
   }
-  return { safe: false, text: "门窗未关闭" }
+  if (windows) {
+    if (windows.leftFront === "open") windowOpen.push("左前车窗")
+    if (windows.rightFront === "open") windowOpen.push("右前车窗")
+    if (windows.leftRear === "open") windowOpen.push("左后车窗")
+    if (windows.rightRear === "open") windowOpen.push("右后车窗")
+  }
+  const messages: string[] = []
+  if (doorOpen.length === 1) messages.push(`${doorOpen[0]}未关闭`)
+  else if (doorOpen.length > 1) messages.push("多个车门未关闭")
+  if (windowOpen.length === 1) messages.push(`${windowOpen[0]}未关闭`)
+  else if (windowOpen.length > 1) messages.push("多个车窗未关闭")
+  if (messages.length > 0) return { safe: false, text: messages.join(" · ") }
+  // 无细化状态时回退合并状态
+  if (!doors && !windows) {
+    if (a.doors === "open" || a.windows === "open") return { safe: false, text: "有门窗未关闭" }
+    if (a.doors === "unknown" && a.windows === "unknown") return { safe: false, text: "门窗状态未知" }
+  }
+  const hasUnknown =
+    (doors ? (doors.leftFront === "unknown" || doors.rightFront === "unknown" || doors.leftRear === "unknown" || doors.rightRear === "unknown") : false) ||
+    (windows ? (windows.leftFront === "unknown" || windows.rightFront === "unknown" || windows.leftRear === "unknown" || windows.rightRear === "unknown") : false)
+  if (hasUnknown) return { safe: false, text: "部分门窗状态未知" }
+  return { safe: true, text: "门窗均已关闭" }
 }
 
 function fuelLevelText(snapshot: VehicleSnapshot): string {

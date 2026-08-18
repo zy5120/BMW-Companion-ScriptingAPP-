@@ -1,5 +1,5 @@
 import { Intent, Script } from "scripting"
-import { displayAddress, freshnessLabel, lockLabel, safetySummary } from "./formatters"
+import { displayAddress, freshnessLabel, lockInfo, safetySummary } from "./formatters"
 import { getFreshness, loadSettings, loadWidgetSnapshot } from "./storage"
 
 const snapshot = loadWidgetSnapshot()
@@ -40,7 +40,7 @@ if (wantsJSON) {
           : "能源信息未知"
   Script.exit(Intent.text(
     `${snapshot.identity.displayName}，${energyPart}，` +
-    `${snapshot.energy.rangeKm ?? "未知"} 公里预计续航，${lockLabel(snapshot.access.lock)}，` +
+    `${snapshot.energy.rangeKm ?? "未知"} 公里预计续航，${lockInfo(snapshot).text}，` +
     `${safety.text}。${alertText}${freshnessLabel(getFreshness(snapshot))}。`,
   ))
 }

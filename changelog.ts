@@ -1,5 +1,5 @@
 // 版本号与更新日志（用于「更新展示」sheet 与设置页版本号）
-export const CURRENT_VERSION = "0.2.14"
+export const CURRENT_VERSION = "0.2.15"
 
 export interface VersionNote {
   version: string
@@ -10,6 +10,14 @@ export interface VersionNote {
 // 按新→旧排列，最多保留近 5 条（slice 兜底，超出自动截断；发版时也建议删除最旧条目）。
 // 新增版本时在顶部加一条，并把 CURRENT_VERSION 同步更新。
 export const CHANGELOG: VersionNote[] = [
+  {
+    version: "0.2.15",
+    title: "锁车状态统一与组件门窗提醒",
+    notes: [
+      "锁车状态改为统一来源（已上锁/已解锁），多端一致",
+      "组件门窗状态只判断门窗并显示关键提醒",
+    ],
+  },
   {
     version: "0.2.14",
     title: "车门车窗自适应两门/四门",

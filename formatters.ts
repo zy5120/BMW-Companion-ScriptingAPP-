@@ -45,10 +45,18 @@ export function freshnessColor(value: Freshness): string {
   }
 }
 
-export function lockLabel(value: LockState): string {
-  if (value === "locked") return "已锁车"
-  if (value === "unlocked") return "未锁车"
-  return "锁车状态未知"
+export interface LockInfo {
+  text: string
+  locked: boolean
+  unknown: boolean
+}
+
+// 锁车状态唯一来源：车况页卡片、详情页、小组件共用同一逻辑
+// 统一文案：已上锁 / 已解锁 / 锁车状态未知
+export function lockInfo(snapshot: { access: { lock: LockState } }): LockInfo {
+  if (snapshot.access.lock === "unknown") return { text: "锁车状态未知", locked: false, unknown: true }
+  const locked = snapshot.access.lock === "locked"
+  return { text: locked ? "已上锁" : "已解锁", locked, unknown: false }
 }
 
 export function knownStateLabel(value: KnownState, subject: string): string {
