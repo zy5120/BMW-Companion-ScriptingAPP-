@@ -422,6 +422,13 @@ function StatusDetailsPage({ showClose = false }: { showClose?: boolean }) {
   const dismiss = Navigation.useDismiss()
   const snapshot = loadSnapshot()
   const safety = safetySummary(snapshot)
+  // 是否有后排数据：左后/右后均非 unknown → 四门车，按四格展示；否则两门车，左前/右前改名左门/右门
+  const hasRearDoors = Boolean(snapshot.access.doorStates &&
+    snapshot.access.doorStates.leftRear !== "unknown" &&
+    snapshot.access.doorStates.rightRear !== "unknown")
+  const hasRearWindows = Boolean(snapshot.access.windowStates &&
+    snapshot.access.windowStates.leftRear !== "unknown" &&
+    snapshot.access.windowStates.rightRear !== "unknown")
   return (
     <List
       navigationTitle="车辆状态"
@@ -454,16 +461,27 @@ function StatusDetailsPage({ showClose = false }: { showClose?: boolean }) {
       </Section>
       <Section header={<Text font="headline">车门</Text>}>
         {snapshot.access.doorStates ? (
-          <>
+          hasRearDoors ? (
+            <>
+              <HStack spacing={8}>
+                <AccessCell icon="car.top.door.front.left.open" label="左前" state={snapshot.access.doorStates.leftFront} />
+                <AccessCell icon="car.top.door.front.right.open" label="右前" state={snapshot.access.doorStates.rightFront} />
+              </HStack>
+              <HStack spacing={8} padding={{ top: 8 }}>
+                <AccessCell icon="car.top.door.rear.left.open" label="左后" state={snapshot.access.doorStates.leftRear} />
+                <AccessCell icon="car.top.door.rear.right.open" label="右后" state={snapshot.access.doorStates.rightRear} />
+              </HStack>
+            </>
+          ) : (
             <HStack spacing={8}>
-              <AccessCell icon="car.top.door.front.left.open" label="左前" state={snapshot.access.doorStates.leftFront} />
-              <AccessCell icon="car.top.door.front.right.open" label="右前" state={snapshot.access.doorStates.rightFront} />
+              {snapshot.access.doorStates.leftFront !== "unknown" ? (
+                <AccessCell icon="car.top.door.front.left.open" label="左门" state={snapshot.access.doorStates.leftFront} />
+              ) : null}
+              {snapshot.access.doorStates.rightFront !== "unknown" ? (
+                <AccessCell icon="car.top.door.front.right.open" label="右门" state={snapshot.access.doorStates.rightFront} />
+              ) : null}
             </HStack>
-            <HStack spacing={8} padding={{ top: 8 }}>
-              <AccessCell icon="car.top.door.rear.left.open" label="左后" state={snapshot.access.doorStates.leftRear} />
-              <AccessCell icon="car.top.door.rear.right.open" label="右后" state={snapshot.access.doorStates.rightRear} />
-            </HStack>
-          </>
+          )
         ) : snapshot.access.doors !== "unknown" ? (
           <AccessRow icon="car.top.door.front.left.open" label="车门" state={snapshot.access.doors} />
         ) : (
@@ -472,16 +490,27 @@ function StatusDetailsPage({ showClose = false }: { showClose?: boolean }) {
       </Section>
       <Section header={<Text font="headline">车窗</Text>}>
         {snapshot.access.windowStates ? (
-          <>
+          hasRearWindows ? (
+            <>
+              <HStack spacing={8}>
+                <AccessCell icon="car.window.left" label="左前" state={snapshot.access.windowStates.leftFront} />
+                <AccessCell icon="car.window.right" label="右前" state={snapshot.access.windowStates.rightFront} />
+              </HStack>
+              <HStack spacing={8} padding={{ top: 8 }}>
+                <AccessCell icon="car.window.left" label="左后" state={snapshot.access.windowStates.leftRear} />
+                <AccessCell icon="car.window.right" label="右后" state={snapshot.access.windowStates.rightRear} />
+              </HStack>
+            </>
+          ) : (
             <HStack spacing={8}>
-              <AccessCell icon="car.window.left" label="左前" state={snapshot.access.windowStates.leftFront} />
-              <AccessCell icon="car.window.right" label="右前" state={snapshot.access.windowStates.rightFront} />
+              {snapshot.access.windowStates.leftFront !== "unknown" ? (
+                <AccessCell icon="car.window.left" label="左窗" state={snapshot.access.windowStates.leftFront} />
+              ) : null}
+              {snapshot.access.windowStates.rightFront !== "unknown" ? (
+                <AccessCell icon="car.window.right" label="右窗" state={snapshot.access.windowStates.rightFront} />
+              ) : null}
             </HStack>
-            <HStack spacing={8} padding={{ top: 8 }}>
-              <AccessCell icon="car.window.left" label="左后" state={snapshot.access.windowStates.leftRear} />
-              <AccessCell icon="car.window.right" label="右后" state={snapshot.access.windowStates.rightRear} />
-            </HStack>
-          </>
+          )
         ) : snapshot.access.windows !== "unknown" ? (
           <AccessRow icon="car.window.left" label="车窗" state={snapshot.access.windows} />
         ) : (

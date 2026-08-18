@@ -1,5 +1,5 @@
 // 版本号与更新日志（用于「更新展示」sheet 与设置页版本号）
-export const CURRENT_VERSION = "0.2.13"
+export const CURRENT_VERSION = "0.2.14"
 
 export interface VersionNote {
   version: string
@@ -10,6 +10,14 @@ export interface VersionNote {
 // 按新→旧排列，最多保留近 5 条（slice 兜底，超出自动截断；发版时也建议删除最旧条目）。
 // 新增版本时在顶部加一条，并把 CURRENT_VERSION 同步更新。
 export const CHANGELOG: VersionNote[] = [
+  {
+    version: "0.2.14",
+    title: "车门车窗自适应两门/四门",
+    notes: [
+      "四门车显示四个车门/车窗状态",
+      "两门车自动隐藏后排并显示左门/右门",
+    ],
+  },
   {
     version: "0.2.13",
     title: "MINI 白色车标与状态页排版优化",
