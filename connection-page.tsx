@@ -33,7 +33,7 @@ import {
 import type { NonceProviderId } from "./domain"
 import { loadSession, removeSession, saveSession } from "./session-vault"
 import { refreshMapSnapshot } from "./map-snapshot"
-import { loadSettings, saveConnectedSnapshot, saveSettings, setRuntimeMode } from "./storage"
+import { loadSettings, loadSnapshot, saveConnectedSnapshot, saveSettings, setRuntimeMode } from "./storage"
 
 const ACCENT = "#166DFF"
 
@@ -108,6 +108,25 @@ export function ConnectionPage() {
   const [vehicles, setVehicles] = useState<VehicleListItem[]>([])
   const [selectedVin, setSelectedVin] = useState("")
   const [vehicleLoading, setVehicleLoading] = useState(false)
+  // 能源类型手动覆盖（自动识别失败/不准时使用，跟随当前所选车辆）
+  const energyKey = selectedVin || (loadSnapshot().vin ?? loadSnapshot().localVehicleId)
+  const [energyType, setEnergyType] = useState<string>(loadSettings().energyTypeOverrides?.[energyKey] ?? "auto")
+  useEffect(() => {
+    const key = selectedVin || (loadSnapshot().vin ?? loadSnapshot().localVehicleId)
+    setEnergyType(loadSettings().energyTypeOverrides?.[key] ?? "auto")
+  }, [selectedVin])
+  const persistEnergyType = (value: string) => {
+    setEnergyType(value)
+    const settings = loadSettings()
+    const overrides = { ...(settings.energyTypeOverrides ?? {}) }
+    if (value === "auto") {
+      delete overrides[energyKey]
+    } else {
+      overrides[energyKey] = value as "fuel" | "hybrid" | "electric"
+    }
+    saveSettings({ ...settings, energyTypeOverrides: overrides })
+    Widget.reloadAll()
+  }
 
   const reloadVehicles = async () => {
     const session = loadSession()
@@ -305,6 +324,26 @@ export function ConnectionPage() {
           )
         ) : null}
       </Section>
+
+      {loadSession() && vehicles.length > 0 ? (
+        <Section
+          header={<Text font="headline">能源类型</Text>}
+          footer={<Text font="caption">自动识别失败或不准时，可在此手动指定当前车辆的能源类型。</Text>}
+        >
+          <Picker
+            value={energyType}
+            onChanged={persistEnergyType}
+            pickerStyle="menu"
+            title="能源类型"
+            systemImage="bolt.car.fill"
+          >
+            <Text tag="auto">自动识别</Text>
+            <Text tag="fuel">燃油车</Text>
+            <Text tag="hybrid">混动车</Text>
+            <Text tag="electric">纯电车</Text>
+          </Picker>
+        </Section>
+      ) : null}
 
       <Section
         header={<Text font="headline">登录验证服务</Text>}

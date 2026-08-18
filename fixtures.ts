@@ -27,6 +27,18 @@ export function makeDemoSnapshot(now = new Date()): VehicleSnapshot {
       roof: "closed",
       hood: "closed",
       trunk: "closed",
+      doorStates: {
+        leftFront: "closed",
+        leftRear: "closed",
+        rightFront: "closed",
+        rightRear: "closed",
+      },
+      windowStates: {
+        leftFront: "closed",
+        leftRear: "closed",
+        rightFront: "closed",
+        rightRear: "closed",
+      },
     },
     tires: {
       frontLeft: { pressureBar: 2.5, targetBar: 2.5, status: "normal" },

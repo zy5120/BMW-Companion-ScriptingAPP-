@@ -221,6 +221,14 @@ async function fetchOfficialCarImage(snapshot: VehicleSnapshot): Promise<UIImage
   }
 }
 
+// 车门/车窗摘要（车辆安全卡小字，避免与锁车大字重复）
+function doorWindowSummary(snapshot: VehicleSnapshot): string {
+  const parts: string[] = []
+  if (snapshot.access.doors !== "unknown") parts.push(knownStateLabel(snapshot.access.doors, "车门"))
+  if (snapshot.access.windows !== "unknown") parts.push(knownStateLabel(snapshot.access.windows, "车窗"))
+  return parts.join(" · ") || "门窗状态未知"
+}
+
 function energyTypeLabel(snapshot: VehicleSnapshot): string {
   switch (snapshot.energy.type) {
     case "electric": return "纯电车"
@@ -230,7 +238,7 @@ function energyTypeLabel(snapshot: VehicleSnapshot): string {
   }
 }
 
-function EnergyHero({ snapshot, onChangeEnergyType }: { snapshot: VehicleSnapshot; onChangeEnergyType?: () => void }) {
+function EnergyHero({ snapshot }: { snapshot: VehicleSnapshot }) {
   const level = snapshot.energy.levelPercent ?? 0
   const range = snapshot.energy.rangeKm
   const electric = snapshot.energy.type === "electric"
@@ -244,48 +252,42 @@ function EnergyHero({ snapshot, onChangeEnergyType }: { snapshot: VehicleSnapsho
     return () => { cancelled = true }
   }, [snapshot.vin])
   return (
-    <Button action={() => onChangeEnergyType?.()} frame={{ maxWidth: Infinity }}>
-      <HStack
-        spacing={18}
-        padding={18}
-        background={{ light: "#EAF2FF", dark: "#10233F" } as any}
-        clipShape={{ type: "rect", cornerRadius: 24, style: "continuous" }}
-        frame={{ maxWidth: Infinity, alignment: "leading" }}
-      >
-        <Gauge
-          value={level}
-          min={0}
-          max={100}
-          gaugeStyle="accessoryCircularCapacity"
-          tint={ACCENT}
-          label={<Image systemName={electric ? "bolt.fill" : "fuelpump.fill"} />}
-          currentValueLabel={<Text font="headline" fontWeight="bold">{`${Math.round(level)}%`}</Text>}
-          frame={{ width: 86, height: 86 }}
-        />
-        <VStack alignment="leading" spacing={5} layoutPriority={1}>
-          <HStack spacing={3}>
-            <Text font="caption" fontWeight="semibold" foregroundStyle={ACCENT}>{energyTypeLabel(snapshot)}</Text>
-            <Image systemName="chevron.down" font={8} foregroundStyle={ACCENT} />
-          </HStack>
-          <Text font="caption" foregroundStyle="secondaryLabel">预计剩余续航</Text>
-          <Text font={36} fontWeight="bold" foregroundStyle="label" lineLimit={1} minScaleFactor={0.7}>
-            {range != null ? `${range} km` : "—"}
+    <HStack
+      spacing={18}
+      padding={18}
+      background={{ light: "#EAF2FF", dark: "#10233F" } as any}
+      clipShape={{ type: "rect", cornerRadius: 24, style: "continuous" }}
+      frame={{ maxWidth: Infinity, alignment: "leading" }}
+    >
+      <Gauge
+        value={level}
+        min={0}
+        max={100}
+        gaugeStyle="accessoryCircularCapacity"
+        tint={ACCENT}
+        label={<Image systemName={electric ? "bolt.fill" : "fuelpump.fill"} />}
+        currentValueLabel={<Text font="headline" fontWeight="bold">{`${Math.round(level)}%`}</Text>}
+        frame={{ width: 86, height: 86 }}
+      />
+      <VStack alignment="leading" spacing={5} layoutPriority={1}>
+        <Text font="caption" foregroundStyle="secondaryLabel">预计剩余续航</Text>
+        <Text font={36} fontWeight="bold" foregroundStyle="label" lineLimit={1} minScaleFactor={0.7}>
+          {range != null ? `${range} km` : "—"}
+        </Text>
+        <HStack spacing={5}>
+          <Image systemName={electric ? "bolt.car.fill" : "fuelpump.fill"} font="caption" foregroundStyle={ACCENT} />
+          <Text font="caption" foregroundStyle="secondaryLabel">
+            {snapshot.energy.consumption != null
+              ? `${snapshot.energy.consumption}${snapshot.energy.consumptionUnit ? ` ${snapshot.energy.consumptionUnit}` : ""}`
+              : "能耗不可用"}
           </Text>
-          <HStack spacing={5}>
-            <Image systemName={electric ? "bolt.car.fill" : "fuelpump.fill"} font="caption" foregroundStyle={ACCENT} />
-            <Text font="caption" foregroundStyle="secondaryLabel">
-              {snapshot.energy.consumption != null
-                ? `${snapshot.energy.consumption}${snapshot.energy.consumptionUnit ? ` ${snapshot.energy.consumptionUnit}` : ""}`
-                : "能耗不可用"}
-            </Text>
-          </HStack>
-        </VStack>
-        <Spacer />
-        {carImage ? (
-          <Image image={carImage} resizable scaleToFit frame={{ width: 100, height: 64 }} />
-        ) : null}
-      </HStack>
-    </Button>
+        </HStack>
+      </VStack>
+      <Spacer />
+      {carImage ? (
+        <Image image={carImage} resizable scaleToFit frame={{ width: 100, height: 64 }} />
+      ) : null}
+    </HStack>
   )
 }
 
@@ -400,14 +402,71 @@ function StatusDetailsPage({ showClose = false }: { showClose?: boolean }) {
           <Text foregroundStyle="secondaryLabel">{lockLabel(snapshot.access.lock)}</Text>
         </HStack>
       </Section>
-      <Section header={<Text font="headline">门窗状态</Text>}>
-        {snapshot.access.doors !== "unknown" ? <AccessRow icon="car.top.door.front.left.open" label="车门" state={snapshot.access.doors} /> : null}
-        {snapshot.access.windows !== "unknown" ? <AccessRow icon="car.window.left" label="车窗" state={snapshot.access.windows} /> : null}
+      <Section header={<Text font="headline">车门</Text>}>
+        {snapshot.access.doorStates ? (
+          <>
+            <AccessRow icon="car.top.door.front.left.open" label="左前车门" state={snapshot.access.doorStates.leftFront} />
+            <AccessRow icon="car.top.door.front.right.open" label="右前车门" state={snapshot.access.doorStates.rightFront} />
+            <AccessRow icon="car.top.door.rear.left.open" label="左后车门" state={snapshot.access.doorStates.leftRear} />
+            <AccessRow icon="car.top.door.rear.right.open" label="右后车门" state={snapshot.access.doorStates.rightRear} />
+          </>
+        ) : snapshot.access.doors !== "unknown" ? (
+          <AccessRow icon="car.top.door.front.left.open" label="车门" state={snapshot.access.doors} />
+        ) : (
+          <Text font="caption" foregroundStyle="secondaryLabel">该车辆未提供车门状态数据。</Text>
+        )}
+      </Section>
+      <Section header={<Text font="headline">车窗</Text>}>
+        {snapshot.access.windowStates ? (
+          <>
+            <AccessRow icon="car.window.left" label="左前车窗" state={snapshot.access.windowStates.leftFront} />
+            <AccessRow icon="car.window.right" label="右前车窗" state={snapshot.access.windowStates.rightFront} />
+            <AccessRow icon="car.window.left" label="左后车窗" state={snapshot.access.windowStates.leftRear} />
+            <AccessRow icon="car.window.right" label="右后车窗" state={snapshot.access.windowStates.rightRear} />
+          </>
+        ) : snapshot.access.windows !== "unknown" ? (
+          <AccessRow icon="car.window.left" label="车窗" state={snapshot.access.windows} />
+        ) : (
+          <Text font="caption" foregroundStyle="secondaryLabel">该车辆未提供车窗状态数据。</Text>
+        )}
+      </Section>
+      <Section header={<Text font="headline">天窗与开闭件</Text>}>
         {snapshot.access.roof !== "unknown" ? <AccessRow icon="rectangle.split.3x1" label="天窗" state={snapshot.access.roof} /> : null}
         {snapshot.access.hood !== "unknown" ? <AccessRow icon="car.side.front.open" label="引擎盖" state={snapshot.access.hood} /> : null}
         {snapshot.access.trunk !== "unknown" ? <AccessRow icon="car.side.rear.open" label="后备箱" state={snapshot.access.trunk} /> : null}
-        {snapshot.access.doors === "unknown" && snapshot.access.windows === "unknown" && snapshot.access.roof === "unknown" && snapshot.access.hood === "unknown" && snapshot.access.trunk === "unknown" ? (
-          <Text font="caption" foregroundStyle="secondaryLabel">该车辆未提供门窗状态数据。</Text>
+        {snapshot.access.roof === "unknown" && snapshot.access.hood === "unknown" && snapshot.access.trunk === "unknown" ? (
+          <Text font="caption" foregroundStyle="secondaryLabel">该车辆未提供相关状态数据。</Text>
+        ) : null}
+      </Section>
+      <Section header={<Text font="headline">能源与里程</Text>}>
+        <HStack spacing={10} padding={{ vertical: 7 }}>
+          <Image systemName={snapshot.energy.type === "electric" ? "bolt.fill" : "fuelpump.fill"} font="body" foregroundStyle={ACCENT} frame={{ width: 24 }} />
+          <Text>油量 / 电量</Text>
+          <Spacer />
+          <Text font="caption" foregroundStyle="secondaryLabel">
+            {energyTypeLabel(snapshot)}
+            {snapshot.energy.levelPercent != null ? ` · ${Math.round(snapshot.energy.levelPercent)}%` : ""}
+          </Text>
+        </HStack>
+        <HStack spacing={10} padding={{ vertical: 7 }}>
+          <Image systemName="arrow.right.circle" font="body" foregroundStyle={ACCENT} frame={{ width: 24 }} />
+          <Text>剩余续航</Text>
+          <Spacer />
+          <Text font="caption" foregroundStyle="secondaryLabel">{snapshot.energy.rangeKm != null ? `${snapshot.energy.rangeKm} km` : "—"}</Text>
+        </HStack>
+        <HStack spacing={10} padding={{ vertical: 7 }}>
+          <Image systemName="gauge.with.dots.needle.67percent" font="body" foregroundStyle={ACCENT} frame={{ width: 24 }} />
+          <Text>总里程</Text>
+          <Spacer />
+          <Text font="caption" foregroundStyle="secondaryLabel">{snapshot.mileageKm != null ? `${snapshot.mileageKm.toLocaleString()} km` : "—"}</Text>
+        </HStack>
+        {snapshot.charging ? (
+          <HStack spacing={10} padding={{ vertical: 7 }}>
+            <Image systemName="bolt.circle" font="body" foregroundStyle={ACCENT} frame={{ width: 24 }} />
+            <Text>充电状态</Text>
+            <Spacer />
+            <Text font="caption" foregroundStyle="secondaryLabel">{snapshot.charging.state === "charging" ? "充电中" : snapshot.charging.state === "complete" ? "已充满" : snapshot.charging.state === "disconnected" ? "未连接" : "未知"}</Text>
+          </HStack>
         ) : null}
       </Section>
     </List>
@@ -755,27 +814,6 @@ function DashboardPage() {
     setSnapshot(next)
   }
 
-  // 兑底：手动切换车辆能源类型（燃油/混动/纯电），仅当前车辆生效
-  const changeEnergyType = async () => {
-    const index = await Dialog.actionSheet({
-      title: "车辆能源类型",
-      message: "自动识别失败或不准时，可手动指定（仅当前车辆生效）。",
-      actions: ["自动识别", "燃油车", "混动车", "纯电车"].map(label => ({ label })),
-    })
-    if (index == null) return
-    const key = snapshot.vin ?? snapshot.localVehicleId
-    const settings = loadSettings()
-    const overrides = { ...(settings.energyTypeOverrides ?? {}) }
-    if (index === 0) {
-      delete overrides[key]
-    } else {
-      overrides[key] = (["fuel", "hybrid", "electric"] as const)[index - 1]
-    }
-    saveSettings({ ...settings, energyTypeOverrides: overrides })
-    setSnapshot(loadSnapshot())
-    Widget.reloadAll()
-  }
-
   const refresh = async () => {
     if (refreshing) return
     const session = loadSession()
@@ -849,7 +887,7 @@ function DashboardPage() {
     >
       <VStack alignment="leading" spacing={16} padding={{ horizontal: 16, top: 10, bottom: 28 }}>
         <VehicleHeader snapshot={snapshot} refreshing={refreshing} refreshResult={refreshResult} />
-        <EnergyHero snapshot={snapshot} onChangeEnergyType={changeEnergyType} />
+        <EnergyHero snapshot={snapshot} />
 
         <LazyVGrid
           columns={[
@@ -858,13 +896,15 @@ function DashboardPage() {
           ]}
           spacing={10}
         >
-          <MetricCard
-            icon={snapshot.access.lock === "locked" ? "lock.shield.fill" : "lock.open.fill"}
-            title="车辆安全"
-            value={lockLabel(snapshot.access.lock)}
-            subtitle={safety.text}
-            tint={safety.safe ? "#30D158" : "#FF9F0A"}
-          />
+          <NavigationLink destination={detailsDestination} frame={{ maxWidth: Infinity }}>
+            <MetricCard
+              icon={snapshot.access.lock === "locked" ? "lock.shield.fill" : "lock.open.fill"}
+              title="车辆安全"
+              value={lockLabel(snapshot.access.lock)}
+              subtitle={doorWindowSummary(snapshot)}
+              tint={safety.safe ? "#30D158" : "#FF9F0A"}
+            />
+          </NavigationLink>
           <MetricCard
             icon="gauge.with.dots.needle.67percent"
             title="总里程"
@@ -923,11 +963,11 @@ function DashboardPage() {
               background={CARD}
               clipShape={{ type: "rect", cornerRadius: 17 }}
             >
-              <Image systemName="lock.shield.fill" foregroundStyle="#30D158" font="title3" />
+              <Image systemName="car.2.fill" foregroundStyle="#30D158" font="title3" />
               <VStack alignment="leading" spacing={2}>
-                <Text font="headline">门窗与锁车</Text>
+                <Text font="headline">车辆状态</Text>
                 <Text font="caption" foregroundStyle="secondaryLabel">
-                  {knownStateLabel(snapshot.access.doors, "车门")}
+                  {knownStateLabel(snapshot.access.doors, "车门")} · {knownStateLabel(snapshot.access.windows, "车窗")}
                 </Text>
               </VStack>
               <Spacer />

@@ -343,14 +343,6 @@ function tire(
   return { pressureBar, targetBar, status: warning ? "warning" : "normal" }
 }
 
-// 低级别（LOW/MEDIUM）checkControlMessages 里，只有保养/机油类才同步显示（车机会提示），
-// 其余类型（胎压等）仅高级别告警才显示，避免误报。
-const MAINTENANCE_CHECK_TYPES = new Set([
-  "ENGINE_OIL", "OIL_SERVICE", "SERVICE", "BRAKE_FLUID", "COOLANT", "COOLANT_LEVEL",
-  "WASHER_FLUID", "WASHER_WATER", "BATTERY", "EMISSION", "EMISSION_CHECK", "EXHAUST",
-  "AIR_FILTER", "SPARK_PLUG", "ADBLUE", "DPF", "PARTICLE_FILTER", "VEHICLE_CHECK",
-])
-
 const CHECK_TYPE_LABELS: Record<string, string> = {
   TIRE_PRESSURE: "胎压",
   ENGINE_OIL: "机油",
@@ -416,8 +408,6 @@ function checkTitle(item: any): string {
   const type = String(item?.type ?? "").trim().toUpperCase()
   const typeLabel = CHECK_TYPE_LABELS[type] ?? (type || "车辆")
   const severity = String(item?.severity ?? "").trim().toUpperCase()
-  // 机油 LOW 通知通常指「机油保养」（车机提示保养/超里程），不是油量过低
-  if (type === "ENGINE_OIL" && ["LOW", "LOWEST"].includes(severity)) return "机油需要保养"
   if (["LOW", "LOWEST"].includes(severity)) return `${typeLabel}过低`
   if (["HIGH", "HIGHEST"].includes(severity)) return `${typeLabel}过高`
   if (["MEDIUM", "MIDDLE"].includes(severity)) return `${typeLabel}异常`
@@ -430,8 +420,6 @@ function checkDetail(item: any): string | undefined {
   const type = String(item?.type ?? "").trim().toUpperCase()
   const typeLabel = CHECK_TYPE_LABELS[type] ?? type
   const severity = String(item?.severity ?? "").trim().toUpperCase()
-  // 机油 LOW 通知：与标题一致，提示保养
-  if (type === "ENGINE_OIL" && ["LOW", "LOWEST"].includes(severity)) return "请尽快安排机油保养"
   const severityLabel =
     ["LOW", "LOWEST"].includes(severity) ? "过低" :
     ["HIGH", "HIGHEST"].includes(severity) ? "过高" :
@@ -487,17 +475,11 @@ function normalizeVehicle(
   const doors = state.doorsState ?? {}
   const windows = state.windowsState ?? {}
   const roof = state.roofState ?? {}
-  // 车机通知同步到「需要关注」：高级别告警全部显示；
-  // 低级别只显示保养/机油类（车机确实会提示的），避免胎压等无关 LOW 消息误报。
+  // 「需要关注」只使用实时、权威的告警：仅保留 HIGH/HIGHEST/CRITICAL 级别的 checkControlMessages。
+  // LOW/MEDIUM 多为信息性/历史记录（例如胎压 LOW 但车机未告警），不显示，避免误报。
   const rawChecks = Array.isArray(state.checkControlMessages) ? state.checkControlMessages : []
   const checks: VehicleCheck[] = rawChecks
-    .filter(item => {
-      const severity = String(item?.severity ?? "").trim().toUpperCase()
-      const type = String(item?.type ?? item?.id ?? "").trim().toUpperCase()
-      if (["HIGH", "HIGHEST", "CRITICAL"].includes(severity)) return true
-      if (["MEDIUM", "MIDDLE"].includes(severity)) return true
-      return MAINTENANCE_CHECK_TYPES.has(type)
-    })
+    .filter(item => ["HIGH", "HIGHEST", "CRITICAL"].includes(String(item?.severity ?? "").trim().toUpperCase()))
     .slice(0, 20)
     .map((item: any, index: number) => ({
       id: String(item?.id ?? item?.type ?? `bmw-check-${index}`),
@@ -571,6 +553,18 @@ function normalizeVehicle(
       roof: knownState(roof.roofState),
       hood: knownState(doors.hood),
       trunk: knownState(doors.trunk),
+      doorStates: {
+        leftFront: knownState(doors.leftFront),
+        leftRear: knownState(doors.leftRear),
+        rightFront: knownState(doors.rightFront),
+        rightRear: knownState(doors.rightRear),
+      },
+      windowStates: {
+        leftFront: knownState(windows.leftFront),
+        leftRear: knownState(windows.leftRear),
+        rightFront: knownState(windows.rightFront),
+        rightRear: knownState(windows.rightRear),
+      },
     },
     tires,
     charging: electric ? {
@@ -625,26 +619,26 @@ async function fetchMaintenance(
   }
 }
 
-// 把「即将到期/已到期」的保养项转成「需要关注」条目：
-// 到期日期在 30 天内（含已过期），或剩余里程 ≤500km 视为临近。
+// 把「需要保养/已到期」的 CBS 保养项转成「需要关注」条目：
+// 仅当状态非正常（status ≠ OK）或按日期/里程已过期时才提醒，不做“即将到期”猜测，避免误报。
 function buildMaintenanceChecks(items: MaintenanceItem[]): VehicleCheck[] {
   const now = Date.now()
   const checks: VehicleCheck[] = []
   for (const item of items) {
+    const status = (item.status || "").trim().toUpperCase()
+    const notOk = status !== "" && status !== "OK" && status !== "NORMAL"
     const dueAt = item.dateTime ? Date.parse(item.dateTime) : NaN
-    const daysLeft = Number.isFinite(dueAt) ? (dueAt - now) / 86_400_000 : null
-    const nearByDate = daysLeft != null && daysLeft <= 30
-    const nearByMileage = item.mileageKm != null && item.mileageKm >= 0 && item.mileageKm <= 500
-    if (!nearByDate && !nearByMileage) continue
-    const overdue = daysLeft != null && daysLeft < 0
-    const title = overdue ? `${item.name}已到期` : `${item.name}即将到期`
+    const overdueByDate = Number.isFinite(dueAt) && dueAt < now
+    const overdueByMileage = item.mileageKm != null && item.mileageKm <= 0
+    if (!notOk && !overdueByDate && !overdueByMileage) continue
+    const overdue = overdueByDate || overdueByMileage
     const detailParts: string[] = []
     if (item.dateTime) detailParts.push(`最迟 ${item.dateTime.slice(0, 10)}`)
     if (item.mileageKm != null) detailParts.push(`剩余 ${item.mileageKm} km`)
     checks.push({
       id: `MAINTENANCE_${item.type || "ITEM"}`,
-      severity: overdue ? "critical" : "warning",
-      title,
+      severity: "warning",
+      title: overdue ? `${item.name}已到期` : `${item.name}需要保养`,
       detail: detailParts.length ? detailParts.join(" · ") : undefined,
     })
   }

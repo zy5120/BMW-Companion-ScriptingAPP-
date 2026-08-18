@@ -50,6 +50,19 @@ export interface VehicleSnapshot {
     roof: KnownState
     hood: KnownState
     trunk: KnownState
+    // 细化：各车门/车窗独立状态（接口返回时才有，否则 undefined）
+    doorStates?: {
+      leftFront: KnownState
+      leftRear: KnownState
+      rightFront: KnownState
+      rightRear: KnownState
+    }
+    windowStates?: {
+      leftFront: KnownState
+      leftRear: KnownState
+      rightFront: KnownState
+      rightRear: KnownState
+    }
   }
   tires?: {
     frontLeft?: TireState
