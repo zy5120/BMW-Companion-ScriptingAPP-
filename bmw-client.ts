@@ -427,15 +427,23 @@ function checkDetail(item: any): string | undefined {
   return typeLabel && severityLabel ? `${typeLabel}${severityLabel}` : undefined
 }
 
-// 识别逻辑①：vehicle-data/profile 接口的 driveTrain 直接字段（COMBUSTION / ELECTRIC / HYBRID）。
+// 识别逻辑①：vehicle-data/profile 接口的 driveTrain 直接字段（COMBUSTION / ELECTRIC / HYBRID / MILD_HYBRID）。
 // 这是最可靠的驱动类型来源，替代基于车况能源字段的推断。
 function driveTypeFromProfile(profile?: Record<string, any> | null): "fuel" | "electric" | "hybrid" | "unknown" {
   const dt = typeof profile?.driveTrain === "string" ? profile.driveTrain.trim().toUpperCase() : ""
   if (!dt) return "unknown"
+  // 48V 轻混（MILD_HYBRID / MHEV / 48V）本质是燃油车：不能纯电行驶，按燃油车处理，避免误标混动
+  if (/MHEV|MILD_HYBRID|48V/.test(dt)) return "fuel"
   if (/HYBRID|PHEV/.test(dt)) return "hybrid"
   if (/ELECTRIC|BEV/.test(dt)) return "electric"
   if (/COMBUSTION|^CO$|FUEL|ICE|DIESEL|GASOLINE|PETROL/.test(dt)) return "fuel"
   return "unknown"
+}
+
+// 48V 轻混平台标记（MILD_HYBRID / MHEV / 48V）：归类燃油车，但 UI 标注“（48V 轻混）”
+function isMildHybridProfile(profile?: Record<string, any> | null): boolean {
+  const dt = typeof profile?.driveTrain === "string" ? profile.driveTrain.trim().toUpperCase() : ""
+  return /MHEV|MILD_HYBRID|48V/.test(dt)
 }
 
 // 拉取车辆数据档案（vehicle-data/profile），取 driveTrain 直接字段
@@ -462,12 +470,15 @@ function normalizeVehicle(
   vehicle: RawVehicle,
   state: Record<string, any>,
   profileType: "fuel" | "electric" | "hybrid" | "unknown",
+  mildHybrid = false,
 ): VehicleSnapshot {
   const vin = typeof vehicle.vin === "string" ? vehicle.vin : ""
   if (!/^[A-HJ-NPR-Z0-9]{17}$/i.test(vin)) throw new Error("VEHICLE_VIN_INVALID")
   const electric = state.electricChargingState
   const fuel = state.combustionFuelLevel
-  const level = finiteNumber(electric?.chargingLevelPercent ?? fuel?.remainingFuelPercent)
+  const batteryPercent = finiteNumber(electric?.chargingLevelPercent)
+  const fuelPercent = finiteNumber(fuel?.remainingFuelPercent)
+  const level = batteryPercent ?? fuelPercent
   const range = finiteNumber(electric?.range ?? fuel?.range)
   // 能源类型只认两个逻辑：1) profile 的 driveTrain 直接字段；2) 用户手动覆盖（applyEnergyOverride，见 storage）。
   // 不再基于车况能源字段推断，避免纯电车因接口返回空油量对象被误判成混动。
@@ -550,8 +561,11 @@ function chargingState(electric: Record<string, any>): "charging" | "complete" |
     energy: {
       type: energyType,
       levelPercent: level != null && level >= 0 && level <= 100 ? level : undefined,
+      fuelPercent: fuelPercent != null && fuelPercent >= 0 && fuelPercent <= 100 ? fuelPercent : undefined,
+      batteryPercent: batteryPercent != null && batteryPercent >= 0 && batteryPercent <= 100 ? batteryPercent : undefined,
       remainingLiters: finiteNumber(fuel?.remainingFuelLiters),
       rangeKm: range != null && range >= 0 ? range : undefined,
+      mildHybrid,
     },
     mileageKm: finiteNumber(state.currentMileage),
     access: {
@@ -819,7 +833,8 @@ export async function fetchFirstVehicleSnapshot(
   // 识别逻辑①：profile 的 driveTrain 直接字段（取不到时返回 unknown，交给用户手动覆盖兜底）
   const profile = await fetchVehicleProfile(session, vin, brand)
   const profileType = driveTypeFromProfile(profile)
-  const snapshot = applyEnergyOverride(normalizeVehicle(vehicle, stateResponse.state, profileType))
+  const mildHybrid = isMildHybridProfile(profile)
+  const snapshot = applyEnergyOverride(normalizeVehicle(vehicle, stateResponse.state, profileType, mildHybrid))
   const consumption = await fetchConsumption(session, vin, snapshot.energy.type, brand)
   if (consumption) {
     snapshot.energy.consumption = consumption.value

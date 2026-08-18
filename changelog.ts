@@ -1,5 +1,5 @@
 // 版本号与更新日志（用于「更新展示」sheet 与设置页版本号）
-export const CURRENT_VERSION = "0.3.0"
+export const CURRENT_VERSION = "0.3.1"
 
 export interface VersionNote {
   version: string
@@ -10,6 +10,14 @@ export interface VersionNote {
 // 按新→旧排列，最多保留近 5 条（slice 兜底，超出自动截断；发版时也建议删除最旧条目）。
 // 新增版本时在顶部加一条，并把 CURRENT_VERSION 同步更新。
 export const CHANGELOG: VersionNote[] = [
+  {
+    version: "0.3.1",
+    title: "轻混识别与能源量展示优化",
+    notes: [
+      "48V 轻混车型识别为燃油车并标注（48V 轻混）",
+      "能源量按车型显示：油量 / 电量 / 油量及电量",
+    ],
+  },
   {
     version: "0.3.0",
     title: "未连接车辆提示与能源字段优化",

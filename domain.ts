@@ -35,12 +35,19 @@ export interface VehicleSnapshot {
   }
   energy: {
     type: EnergyType
+    // 主量（组件用）：油车=油量%，电车=电量%，混动=电量%
     levelPercent?: number
+    // 油量 %（油车/混动）
+    fuelPercent?: number
+    // 电量 %（电车/混动）
+    batteryPercent?: number
     remainingLiters?: number
     rangeKm?: number
     // Number for fuel/electric-only; string (e.g. "6.5 L/100km · 14.2 kWh/100km") for hybrids.
     consumption?: number | string
     consumptionUnit?: string
+    // 48V 轻混平台（显示为燃油车，但标注轻混）
+    mildHybrid?: boolean
   }
   mileageKm?: number
   access: {

@@ -288,11 +288,28 @@ function doorWindowSummary(snapshot: VehicleSnapshot): string {
   return "门窗均已关闭"
 }
 
+// 能源量标签：燃油/轻混→油量；纯电→电量；混动→油量及电量
+function fuelElectricityLabel(snapshot: VehicleSnapshot): string {
+  if (snapshot.energy.type === "electric") return "电量"
+  if (snapshot.energy.type === "hybrid") return "油量及电量"
+  return "油量"
+}
+
+// 能源量数值：按类型输出油量/电量（混动同时输出两者）
+function fuelElectricityValue(snapshot: VehicleSnapshot): string {
+  const e = snapshot.energy
+  const fuelText = e.fuelPercent != null ? `油量 ${Math.round(e.fuelPercent)}%`
+    : e.type !== "electric" && e.levelPercent != null ? `油量 ${Math.round(e.levelPercent)}%` : null
+  const batteryText = e.batteryPercent != null ? `电量 ${Math.round(e.batteryPercent)}%`
+    : e.type === "electric" && e.levelPercent != null ? `电量 ${Math.round(e.levelPercent)}%` : null
+  return [energyTypeLabel(snapshot), fuelText, batteryText].filter((value): value is string => Boolean(value)).join(" · ")
+}
+
 function energyTypeLabel(snapshot: VehicleSnapshot): string {
   switch (snapshot.energy.type) {
     case "electric": return "纯电车"
     case "hybrid": return "混动车"
-    case "fuel": return "燃油车"
+    case "fuel": return snapshot.energy.mildHybrid ? "燃油车（48V 轻混）" : "燃油车"
     default: return "车辆能源"
   }
 }
@@ -537,12 +554,9 @@ function StatusDetailsPage({ showClose = false }: { showClose?: boolean }) {
       <Section header={<Text font="headline">能源与里程</Text>}>
         <HStack spacing={10} padding={{ vertical: 7 }}>
           <Image systemName={snapshot.energy.type === "electric" ? "bolt.fill" : "fuelpump.fill"} font="body" foregroundStyle={ACCENT} frame={{ width: 24 }} />
-          <Text>油量 / 电量</Text>
+          <Text>{fuelElectricityLabel(snapshot)}</Text>
           <Spacer />
-          <Text font="caption" foregroundStyle="secondaryLabel">
-            {energyTypeLabel(snapshot)}
-            {snapshot.energy.levelPercent != null ? ` · ${Math.round(snapshot.energy.levelPercent)}%` : ""}
-          </Text>
+          <Text font="caption" foregroundStyle="secondaryLabel">{fuelElectricityValue(snapshot)}</Text>
         </HStack>
         <HStack spacing={10} padding={{ vertical: 7 }}>
           <Image systemName="arrow.right.circle" font="body" foregroundStyle={ACCENT} frame={{ width: 24 }} />
