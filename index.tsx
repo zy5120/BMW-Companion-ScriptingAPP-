@@ -145,7 +145,7 @@ function MetricCard({
       <Text font="title2" fontWeight="bold" foregroundStyle="label" lineLimit={1} minScaleFactor={0.7}>
         {value}
       </Text>
-      <Text font="caption" foregroundStyle="secondaryLabel" lineLimit={2}>{subtitle}</Text>
+      <Text font="caption" foregroundStyle="secondaryLabel" lineLimit={1} minScaleFactor={0.7}>{subtitle}</Text>
     </VStack>
   )
 }
@@ -162,6 +162,28 @@ function AccessRow({ icon, label, state }: { icon: string; label: string; state:
       <Text font="subheadline" fontWeight="medium" foregroundStyle={color as any}>
         {unknown ? "未知" : ok ? "已关闭" : "未关闭"}
       </Text>
+    </HStack>
+  )
+}
+
+// 紧凑卡片：用于车门/车窗左右并排展示（单行：左侧图标+名称，右侧状态）
+function AccessCell({ icon, label, state }: { icon: string; label: string; state: KnownState }) {
+  const ok = state === "closed"
+  const unknown = state === "unknown"
+  const color = unknown ? "#8E8E93" : ok ? "#30D158" : "#FF453A"
+  const text = unknown ? "状态未知" : ok ? "已关闭" : "未关闭"
+  return (
+    <HStack
+      spacing={6}
+      padding={10}
+      frame={{ maxWidth: Infinity }}
+      background={CARD}
+      clipShape={{ type: "rect", cornerRadius: 12 }}
+    >
+      <Image systemName={icon} font="body" foregroundStyle={color as any} />
+      <Text font="caption" foregroundStyle="secondaryLabel" lineLimit={1}>{label}</Text>
+      <Spacer />
+      <Text font="subheadline" fontWeight="semibold" foregroundStyle={color as any} lineLimit={1}>{text}</Text>
     </HStack>
   )
 }
@@ -221,12 +243,40 @@ async function fetchOfficialCarImage(snapshot: VehicleSnapshot): Promise<UIImage
   }
 }
 
-// 车门/车窗摘要（车辆安全卡小字，避免与锁车大字重复）
+// 车门/车窗关键提醒（车辆安全卡小字，避免与锁车大字重复）
+// 全关→「门窗均已关闭」；多个未关→「多个车门/车窗未关闭」；单个未关→写出具体位置
 function doorWindowSummary(snapshot: VehicleSnapshot): string {
-  const parts: string[] = []
-  if (snapshot.access.doors !== "unknown") parts.push(knownStateLabel(snapshot.access.doors, "车门"))
-  if (snapshot.access.windows !== "unknown") parts.push(knownStateLabel(snapshot.access.windows, "车窗"))
-  return parts.join(" · ") || "门窗状态未知"
+  const doors = snapshot.access.doorStates
+  const windows = snapshot.access.windowStates
+  const doorLabels: Array<[KnownState, string]> = doors ? [
+    [doors.leftFront, "左前车门"],
+    [doors.rightFront, "右前车门"],
+    [doors.leftRear, "左后车门"],
+    [doors.rightRear, "右后车门"],
+  ] : []
+  const windowLabels: Array<[KnownState, string]> = windows ? [
+    [windows.leftFront, "左前车窗"],
+    [windows.rightFront, "右前车窗"],
+    [windows.leftRear, "左后车窗"],
+    [windows.rightRear, "右后车窗"],
+  ] : []
+  const doorOpen = doorLabels.filter(([state]) => state === "open").map(([, label]) => label)
+  const windowOpen = windowLabels.filter(([state]) => state === "open").map(([, label]) => label)
+  const messages: string[] = []
+  if (doorOpen.length === 1) messages.push(`${doorOpen[0]}未关闭`)
+  else if (doorOpen.length > 1) messages.push("多个车门未关闭")
+  if (windowOpen.length === 1) messages.push(`${windowOpen[0]}未关闭`)
+  else if (windowOpen.length > 1) messages.push("多个车窗未关闭")
+  if (messages.length > 0) return messages.join(" · ")
+  // 没有细化状态时回退合并状态
+  if (!doors && !windows) {
+    if (snapshot.access.doors === "open" || snapshot.access.windows === "open") return "有门窗未关闭"
+    if (snapshot.access.doors === "unknown" && snapshot.access.windows === "unknown") return "门窗状态未知"
+  }
+  const hasUnknown = doorLabels.some(([state]) => state === "unknown") ||
+    windowLabels.some(([state]) => state === "unknown")
+  if (hasUnknown) return "部分门窗状态未知"
+  return "门窗均已关闭"
 }
 
 function energyTypeLabel(snapshot: VehicleSnapshot): string {
@@ -397,7 +447,7 @@ function StatusDetailsPage({ showClose = false }: { showClose?: boolean }) {
             systemName={safety.safe ? "checkmark.shield.fill" : "exclamationmark.shield.fill"}
             foregroundStyle={(safety.safe ? "#30D158" : "#FF9F0A") as any}
           />
-          <Text font="headline">{safety.text}</Text>
+          <Text font="headline" lineLimit={1} minScaleFactor={0.7}>{safety.text}</Text>
           <Spacer />
           <Text foregroundStyle="secondaryLabel">{lockLabel(snapshot.access.lock)}</Text>
         </HStack>
@@ -405,10 +455,14 @@ function StatusDetailsPage({ showClose = false }: { showClose?: boolean }) {
       <Section header={<Text font="headline">车门</Text>}>
         {snapshot.access.doorStates ? (
           <>
-            <AccessRow icon="car.top.door.front.left.open" label="左前车门" state={snapshot.access.doorStates.leftFront} />
-            <AccessRow icon="car.top.door.front.right.open" label="右前车门" state={snapshot.access.doorStates.rightFront} />
-            <AccessRow icon="car.top.door.rear.left.open" label="左后车门" state={snapshot.access.doorStates.leftRear} />
-            <AccessRow icon="car.top.door.rear.right.open" label="右后车门" state={snapshot.access.doorStates.rightRear} />
+            <HStack spacing={8}>
+              <AccessCell icon="car.top.door.front.left.open" label="左前" state={snapshot.access.doorStates.leftFront} />
+              <AccessCell icon="car.top.door.front.right.open" label="右前" state={snapshot.access.doorStates.rightFront} />
+            </HStack>
+            <HStack spacing={8} padding={{ top: 8 }}>
+              <AccessCell icon="car.top.door.rear.left.open" label="左后" state={snapshot.access.doorStates.leftRear} />
+              <AccessCell icon="car.top.door.rear.right.open" label="右后" state={snapshot.access.doorStates.rightRear} />
+            </HStack>
           </>
         ) : snapshot.access.doors !== "unknown" ? (
           <AccessRow icon="car.top.door.front.left.open" label="车门" state={snapshot.access.doors} />
@@ -419,10 +473,14 @@ function StatusDetailsPage({ showClose = false }: { showClose?: boolean }) {
       <Section header={<Text font="headline">车窗</Text>}>
         {snapshot.access.windowStates ? (
           <>
-            <AccessRow icon="car.window.left" label="左前车窗" state={snapshot.access.windowStates.leftFront} />
-            <AccessRow icon="car.window.right" label="右前车窗" state={snapshot.access.windowStates.rightFront} />
-            <AccessRow icon="car.window.left" label="左后车窗" state={snapshot.access.windowStates.leftRear} />
-            <AccessRow icon="car.window.right" label="右后车窗" state={snapshot.access.windowStates.rightRear} />
+            <HStack spacing={8}>
+              <AccessCell icon="car.window.left" label="左前" state={snapshot.access.windowStates.leftFront} />
+              <AccessCell icon="car.window.right" label="右前" state={snapshot.access.windowStates.rightFront} />
+            </HStack>
+            <HStack spacing={8} padding={{ top: 8 }}>
+              <AccessCell icon="car.window.left" label="左后" state={snapshot.access.windowStates.leftRear} />
+              <AccessCell icon="car.window.right" label="右后" state={snapshot.access.windowStates.rightRear} />
+            </HStack>
           </>
         ) : snapshot.access.windows !== "unknown" ? (
           <AccessRow icon="car.window.left" label="车窗" state={snapshot.access.windows} />
@@ -966,7 +1024,7 @@ function DashboardPage() {
               <Image systemName="car.2.fill" foregroundStyle="#30D158" font="title3" />
               <VStack alignment="leading" spacing={2}>
                 <Text font="headline">车辆状态</Text>
-                <Text font="caption" foregroundStyle="secondaryLabel">
+                <Text font="caption" foregroundStyle="secondaryLabel" lineLimit={1} minScaleFactor={0.7}>
                   {knownStateLabel(snapshot.access.doors, "车门")} · {knownStateLabel(snapshot.access.windows, "车窗")}
                 </Text>
               </VStack>

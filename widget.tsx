@@ -42,6 +42,9 @@ function setForceDark(value: boolean): void {
   FORCE_DARK = value
 }
 
+// MINI 车标为黑色透明底，深色模式下需以模板模式渲染成白色
+let MINI_DARK_LOGO = false
+
 function darkColor(name: string): any {
   if (!FORCE_DARK) return name
   switch (name) {
@@ -166,6 +169,8 @@ function LogoView({ logo, size = 20 }: { logo: UIImage | null; size?: number }) 
         resizable
         scaleToFit
         frame={{ width: size, height: size }}
+        renderingMode={MINI_DARK_LOGO ? "template" : undefined}
+        foregroundStyle={MINI_DARK_LOGO ? "#FFFFFF" : undefined}
       />
     )
   }
@@ -593,6 +598,9 @@ async function refreshWidgetSnapshotIfStale(snapshot: VehicleSnapshot): Promise<
 async function main() {
   let snapshot = loadWidgetSnapshot()
   setForceDark(loadSettings().alwaysDarkBackground === true)
+  // MINI 车标深色模式渲染白色（模板模式按形状染色）
+  MINI_DARK_LOGO = snapshot.identity.brand?.toLowerCase() === "mini" &&
+    (FORCE_DARK || Device.colorScheme === "dark")
   // 组件每 30 分钟刷新一次：快照过旧时自动拉新数据（失败则沿用旧数据）
   if (loadRuntimeMode() === "connected") {
     snapshot = await refreshWidgetSnapshotIfStale(snapshot)
