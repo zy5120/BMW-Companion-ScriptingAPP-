@@ -62,6 +62,7 @@ function errorMessage(error: unknown): string {
     PASSWORD_INVALID: "请输入 BMW 密码。",
     CAPTCHA_POSITION_NOT_FOUND: "未能识别滑动验证码，请稍后重试。",
     CAPTCHA_VERIFY_REJECTED: "图形校验未通过，请稍后重试。",
+    CAPTCHA_422_RETRY: "登录验证暂时失败（图形校验返回 422），当前 Scripting 版本较旧可能导致验证码识别受限。\n\n请点击登录再试一次；若仍失败，请升级 Scripting 到最新版本后重试。",
     CAPTCHA_IMAGE_INVALID: "验证码图片读取失败，请稍后重试。",
     CAPTCHA_IMAGE_TOO_LARGE: "验证码图片过大，请稍后重试。",
     CAPTCHA_IMAGE_DIMENSIONS_INVALID: "验证码图片格式异常，请稍后重试。",
@@ -281,6 +282,13 @@ export function ConnectionPage() {
     }
   }
 
+  // 加群提示横幅（可关闭，关闭状态持久保存）
+  const [groupBannerDismissed, setGroupBannerDismissed] = useState(Boolean(loadSettings().dismissGroupBanner))
+  const dismissGroupBanner = () => {
+    setGroupBannerDismissed(true)
+    saveSettings({ ...loadSettings(), dismissGroupBanner: true })
+  }
+
   const signOut = async () => {
     const accepted = await Dialog.confirm({
       title: "退出 BMW 会话？",
@@ -309,6 +317,27 @@ export function ConnectionPage() {
         ],
       }}
     >
+      {!groupBannerDismissed ? (
+        <Section header={<Text font="headline">加群交流</Text>}>
+          <HStack spacing={10}>
+            <Image systemName="person.3.fill" font="title3" foregroundStyle={ACCENT} />
+            <VStack alignment="leading" spacing={2} frame={{ maxWidth: Infinity, alignment: "leading" }}>
+              <Text font="subheadline" fontWeight="semibold">欢迎加入交流群 🎉</Text>
+              <Text font="caption" foregroundStyle="secondaryLabel">
+                群号见「设置 → 关于」底部。群人数达到 500 人及以上，将制作并分享远程控制功能。
+              </Text>
+            </VStack>
+            <Button
+              title=""
+              systemImage="xmark.circle.fill"
+              action={dismissGroupBanner}
+              foregroundStyle="secondaryLabel"
+              accessibilityLabel="关闭加群提示"
+            />
+          </HStack>
+        </Section>
+      ) : null}
+
       <Section
         header={<Text font="headline">连接状态</Text>}
         footer={<Text font="caption">密码和短信验证码不会保存；登录凭证只安全保存在本机。</Text>}

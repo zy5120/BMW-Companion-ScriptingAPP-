@@ -199,10 +199,11 @@ async function createAndVerifyCaptcha(mobile: string): Promise<CaptchaChallenge>
   const candidates: Array<Record<string, string>> = [COMPAT_HEADERS_X]
   for (let i = 0; i < 15; i++) candidates.push(randomHeadersX())
 
-  // 最多重试 3 轮：每轮重新创建验证码（换一张新图）并识别位置，避免单次识别/校验失败导致登录失败
-  const MAX_ATTEMPTS = 3
+  // 旧版 Scripting（无像素 API）可能因验证码识别降级导致 422：
+  // 每轮重新创建验证码（换一张新图）并识别位置，持续重试直到成功；30 秒超时后报错
+  const deadline = Date.now() + 30_000
   let lastError: unknown
-  for (let attempt = 0; attempt < MAX_ATTEMPTS; attempt++) {
+  while (Date.now() < deadline) {
     let data: { verifyId: string; backGroundImg: string } | undefined
     let headersX = COMPAT_HEADERS_X
     for (const candidate of candidates) {
@@ -247,6 +248,10 @@ async function createAndVerifyCaptcha(mobile: string): Promise<CaptchaChallenge>
     } catch (error) {
       lastError = error
     }
+  }
+  // 超时仍失败：若最终错误是 422（旧版 Scripting 验证码识别降级被拒），抛专用码提示用户重试
+  if (lastError instanceof Error && lastError.message === "BMW_HTTP_422") {
+    throw new Error("CAPTCHA_422_RETRY")
   }
   throw lastError ?? new Error("CAPTCHA_VERIFY_REJECTED")
 }
