@@ -1,5 +1,5 @@
 // 版本号与更新日志（用于「更新展示」sheet 与设置页版本号）
-export const CURRENT_VERSION = "0.3.2"
+export const CURRENT_VERSION = "0.3.3"
 
 export interface VersionNote {
   version: string
@@ -10,6 +10,14 @@ export interface VersionNote {
 // 按新→旧排列，最多保留近 5 条（slice 兜底，超出自动截断；发版时也建议删除最旧条目）。
 // 新增版本时在顶部加一条，并把 CURRENT_VERSION 同步更新。
 export const CHANGELOG: VersionNote[] = [
+  {
+    version: "0.3.3",
+    title: "验证码识别强化",
+    notes: [
+      "验证码位置识别全块校验，避免误判",
+      "验证失败自动重试换新图",
+    ],
+  },
   {
     version: "0.3.2",
     title: "验证码兼容旧版 Scripting",

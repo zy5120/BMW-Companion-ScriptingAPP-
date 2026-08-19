@@ -164,7 +164,7 @@ function findCaptchaPositionBySampling(image: UIImage): string {
     if (!c) return false
     return captchaColorMatches(Math.round((c as any).r * 255), Math.round((c as any).g * 255), Math.round((c as any).b * 255))
   }
-  // 步长 4 粗扫，命中后向左/上找块左上角，再五点验证
+  // 步长 4 粗扫，命中后向左/上找块左上角，再五点初验 + 全块精验（与 getPixelData 同标准）
   for (let y = 0; y <= height - CAPTCHA_BLOCK_HEIGHT; y += 4) {
     for (let x = 0; x <= width - CAPTCHA_BLOCK_WIDTH; x += 4) {
       if (!matches(x, y)) continue
@@ -178,7 +178,17 @@ function findCaptchaPositionBySampling(image: UIImage): string {
           !matches(ox + Math.floor(CAPTCHA_BLOCK_WIDTH / 2), oy + Math.floor(CAPTCHA_BLOCK_HEIGHT / 2))) {
         continue
       }
-      return ((ox - 26) / width).toFixed(2)
+      // 全块精验：15×75 每个像素都匹配才确认，避免误判导致服务端 422
+      let full = true
+      for (let dy = 0; dy < CAPTCHA_BLOCK_HEIGHT && full; dy += 1) {
+        for (let dx = 0; dx < CAPTCHA_BLOCK_WIDTH; dx += 1) {
+          if (!matches(ox + dx, oy + dy)) {
+            full = false
+            break
+          }
+        }
+      }
+      if (full) return ((ox - 26) / width).toFixed(2)
     }
   }
   throw new Error("CAPTCHA_POSITION_NOT_FOUND")
@@ -189,48 +199,56 @@ async function createAndVerifyCaptcha(mobile: string): Promise<CaptchaChallenge>
   const candidates: Array<Record<string, string>> = [COMPAT_HEADERS_X]
   for (let i = 0; i < 15; i++) candidates.push(randomHeadersX())
 
-  let data: { verifyId: string; backGroundImg: string } | undefined
-  let headersX = COMPAT_HEADERS_X
+  // 最多重试 3 轮：每轮重新创建验证码（换一张新图）并识别位置，避免单次识别/校验失败导致登录失败
+  const MAX_ATTEMPTS = 3
   let lastError: unknown
-
-  for (const candidate of candidates) {
-    try {
-      const created = await requestJSON<unknown>("/eadrax-coas/v2/cop/create-captcha", {
-        method: "POST",
-        headers: candidate,
-        body: JSON.stringify({ mobile, brand: "BMW" }),
-      })
-      const result = requireSuccessData<{ verifyId?: unknown; backGroundImg?: unknown }>(created, "CAPTCHA_CREATE")
-      if (typeof result.verifyId !== "string" || typeof result.backGroundImg !== "string") {
-        throw new Error("CAPTCHA_CONTRACT_INVALID")
+  for (let attempt = 0; attempt < MAX_ATTEMPTS; attempt++) {
+    let data: { verifyId: string; backGroundImg: string } | undefined
+    let headersX = COMPAT_HEADERS_X
+    for (const candidate of candidates) {
+      try {
+        const created = await requestJSON<unknown>("/eadrax-coas/v2/cop/create-captcha", {
+          method: "POST",
+          headers: candidate,
+          body: JSON.stringify({ mobile, brand: "BMW" }),
+        })
+        const result = requireSuccessData<{ verifyId?: unknown; backGroundImg?: unknown }>(created, "CAPTCHA_CREATE")
+        if (typeof result.verifyId !== "string" || typeof result.backGroundImg !== "string") {
+          throw new Error("CAPTCHA_CONTRACT_INVALID")
+        }
+        data = { verifyId: result.verifyId, backGroundImg: result.backGroundImg }
+        headersX = candidate
+        break
+      } catch (error) {
+        lastError = error
       }
-      data = { verifyId: result.verifyId, backGroundImg: result.backGroundImg }
-      headersX = candidate
-      break
+    }
+    if (!data) throw lastError ?? new Error("CAPTCHA_CREATE_REJECTED")
+
+    currentHeadersX = headersX
+    persistHeadersX()
+
+    let position: string
+    try {
+      position = findCaptchaPosition(data.backGroundImg)
+    } catch {
+      // 像素识别失败（含 Scripting 3.2.0 无 getPixelData）：退回随机位置尝试提交，不阻塞登录流程
+      position = randomCaptchaX()
+    }
+    try {
+      const verified = await requestJSON<unknown>("/eadrax-coas/v2/cop/verify-captcha", {
+        method: "POST",
+        headers: headersX,
+        body: JSON.stringify({ position, verifyId: data.verifyId, mobile }),
+      })
+      const result = verified as { code?: unknown }
+      if (result.code === 200) return { verifyId: data.verifyId, mobile }
+      throw new Error("CAPTCHA_VERIFY_REJECTED")
     } catch (error) {
       lastError = error
     }
   }
-  if (!data) throw lastError ?? new Error("CAPTCHA_CREATE_REJECTED")
-
-  currentHeadersX = headersX
-  persistHeadersX()
-
-  let position: string
-  try {
-    position = findCaptchaPosition(data.backGroundImg)
-  } catch {
-    // 像素识别失败（含 Scripting 3.2.0 无 getPixelData）：退回随机位置尝试提交，不阻塞登录流程
-    position = randomCaptchaX()
-  }
-  const verified = await requestJSON<unknown>("/eadrax-coas/v2/cop/verify-captcha", {
-    method: "POST",
-    headers: headersX,
-    body: JSON.stringify({ position, verifyId: data.verifyId, mobile }),
-  })
-  const result = verified as { code?: unknown }
-  if (result.code !== 200) throw new Error("CAPTCHA_VERIFY_REJECTED")
-  return { verifyId: data.verifyId, mobile }
+  throw lastError ?? new Error("CAPTCHA_VERIFY_REJECTED")
 }
 
 // 滑动验证随机 x：x = 前缀 + md5(uuid) + md5(uuid)，截取 64 位
