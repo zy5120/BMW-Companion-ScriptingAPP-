@@ -333,7 +333,7 @@ export function ConnectionPage() {
             >
               {vehicles.map(item => (
                 <Text key={item.vin} tag={item.vin}>
-                  {item.brand} {item.model}{item.licensePlate ? ` · ${item.licensePlate}` : ""}{!item.connected ? "（未连接）" : ""}
+                  {item.brand} {item.model}{item.licensePlate ? ` · ${item.licensePlate}` : ""}
                 </Text>
               ))}
             </Picker>

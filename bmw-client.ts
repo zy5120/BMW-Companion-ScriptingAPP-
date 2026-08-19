@@ -852,7 +852,11 @@ async function fetchVehicleEntries(
     const cn = entry.cnData ?? (entry as RawVehicle | undefined)
     const vin = typeof entry?.vin === "string" ? entry.vin : typeof cn?.vin === "string" ? cn.vin : ""
     if (!vin) continue
-    const connected = entry.isAssociated === true && entry.vehicleMappingType === "CONNECTED"
+    // 已连接判断：任一正向信号（vehicleMappingType=CONNECTED / isAssociated / cdActiveStatus=ACTIVATED）即视为可用，
+    // 避免部分账号返回字段差异导致已开通互联驾驶的车辆被误判为未连接（仅影响选择时的弹窗提示）
+    const connected = entry.vehicleMappingType === "CONNECTED" ||
+      entry.isAssociated === true ||
+      cn?.cdActiveStatus === "ACTIVATED"
     entries.push({
       vin,
       brand,
