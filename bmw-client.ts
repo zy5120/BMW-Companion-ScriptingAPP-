@@ -81,10 +81,39 @@ function requireSuccessData<T>(value: unknown, operation: string): T {
   return result.data as T
 }
 
+// 降级：随机滑动位置（0.05 ~ 0.85）。用于没有任何像素读取 API 的环境（临时兼容，正式版更新后移除）
+function randomCaptchaX(): string {
+  return (0.05 + Math.random() * 0.8).toFixed(2)
+}
+
+// 三层策略保证成功率：getPixelData（3.3.0）→ pixelColor 稀疏采样（3.2.0 若有）→ 随机兜底
 function findCaptchaPosition(base64: string): string {
   if (base64.length > 2_000_000) throw new Error("CAPTCHA_IMAGE_TOO_LARGE")
   const image = UIImage.fromBase64String(base64)
-  const pixelData = image?.getPixelData()
+  if (!image) throw new Error("CAPTCHA_IMAGE_INVALID")
+  if (typeof (image as any).getPixelData === "function") {
+    return findCaptchaPositionFromPixels(image)
+  }
+  if (typeof (image as any).pixelColor === "function") {
+    return findCaptchaPositionBySampling(image)
+  }
+  return randomCaptchaX()
+}
+
+const CAPTCHA_BLOCK_WIDTH = 15
+const CAPTCHA_BLOCK_HEIGHT = 75
+const CAPTCHA_TARGET = [220, 230, 221]
+const CAPTCHA_TOLERANCE = 15
+
+function captchaColorMatches(r: number, g: number, b: number): boolean {
+  return Math.abs(r - CAPTCHA_TARGET[0]) <= CAPTCHA_TOLERANCE &&
+    Math.abs(g - CAPTCHA_TARGET[1]) <= CAPTCHA_TOLERANCE &&
+    Math.abs(b - CAPTCHA_TARGET[2]) <= CAPTCHA_TOLERANCE
+}
+
+// 策略一：getPixelData 全量像素（Scripting 3.3.0）
+function findCaptchaPositionFromPixels(image: UIImage): string {
+  const pixelData = image.getPixelData()
   const bytes = pixelData?.data.toUint8Array()
   if (!pixelData || !bytes) throw new Error("CAPTCHA_IMAGE_INVALID")
 
@@ -92,32 +121,25 @@ function findCaptchaPosition(base64: string): string {
   if (width < 50 || height < 75 || width > 2_000 || height > 2_000 || bytes.length !== width * height * 4) {
     throw new Error("CAPTCHA_IMAGE_DIMENSIONS_INVALID")
   }
-  const blockWidth = 15
-  const blockHeight = 75
-  const target = [220, 230, 221]
-  const tolerance = 15
-
   const matchesTarget = (x: number, y: number): boolean => {
     const offset = (y * width + x) * 4
-    return Math.abs(bytes[offset] - target[0]) <= tolerance &&
-      Math.abs(bytes[offset + 1] - target[1]) <= tolerance &&
-      Math.abs(bytes[offset + 2] - target[2]) <= tolerance
+    return captchaColorMatches(bytes[offset], bytes[offset + 1], bytes[offset + 2])
   }
 
   // Fixed bounds only. Use five cheap probes before the full 15×75 check so
   // arbitrary images cannot force the expensive inner scan at every pixel.
-  for (let y = 0; y < height - blockHeight; y += 1) {
-    for (let x = 0; x < width - blockWidth; x += 1) {
+  for (let y = 0; y < height - CAPTCHA_BLOCK_HEIGHT; y += 1) {
+    for (let x = 0; x < width - CAPTCHA_BLOCK_WIDTH; x += 1) {
       if (!matchesTarget(x, y) ||
-          !matchesTarget(x + blockWidth - 1, y) ||
-          !matchesTarget(x, y + blockHeight - 1) ||
-          !matchesTarget(x + blockWidth - 1, y + blockHeight - 1) ||
-          !matchesTarget(x + Math.floor(blockWidth / 2), y + Math.floor(blockHeight / 2))) {
+          !matchesTarget(x + CAPTCHA_BLOCK_WIDTH - 1, y) ||
+          !matchesTarget(x, y + CAPTCHA_BLOCK_HEIGHT - 1) ||
+          !matchesTarget(x + CAPTCHA_BLOCK_WIDTH - 1, y + CAPTCHA_BLOCK_HEIGHT - 1) ||
+          !matchesTarget(x + Math.floor(CAPTCHA_BLOCK_WIDTH / 2), y + Math.floor(CAPTCHA_BLOCK_HEIGHT / 2))) {
         continue
       }
       let found = true
-      for (let dy = 0; dy < blockHeight && found; dy += 1) {
-        for (let dx = 0; dx < blockWidth; dx += 1) {
+      for (let dy = 0; dy < CAPTCHA_BLOCK_HEIGHT && found; dy += 1) {
+        for (let dx = 0; dx < CAPTCHA_BLOCK_WIDTH; dx += 1) {
           if (!matchesTarget(x + dx, y + dy)) {
             found = false
             break
@@ -125,6 +147,38 @@ function findCaptchaPosition(base64: string): string {
         }
       }
       if (found) return ((x - 26) / width).toFixed(2)
+    }
+  }
+  throw new Error("CAPTCHA_POSITION_NOT_FOUND")
+}
+
+// 策略二：pixelColor 单像素稀疏采样（Scripting 3.2.0 若支持该 API；速度稍慢但精确）
+function findCaptchaPositionBySampling(image: UIImage): string {
+  const width = image.width
+  const height = image.height
+  if (width < 50 || height < 75 || width > 2_000 || height > 2_000) {
+    throw new Error("CAPTCHA_IMAGE_DIMENSIONS_INVALID")
+  }
+  const matches = (x: number, y: number): boolean => {
+    const c = image.pixelColor(x, y)
+    if (!c) return false
+    return captchaColorMatches(Math.round((c as any).r * 255), Math.round((c as any).g * 255), Math.round((c as any).b * 255))
+  }
+  // 步长 4 粗扫，命中后向左/上找块左上角，再五点验证
+  for (let y = 0; y <= height - CAPTCHA_BLOCK_HEIGHT; y += 4) {
+    for (let x = 0; x <= width - CAPTCHA_BLOCK_WIDTH; x += 4) {
+      if (!matches(x, y)) continue
+      let ox = x
+      while (ox > 0 && ox > x - 20 && matches(ox - 1, y)) ox--
+      let oy = y
+      while (oy > 0 && oy > y - 80 && matches(ox, oy - 1)) oy--
+      if (!matches(ox + CAPTCHA_BLOCK_WIDTH - 1, oy) ||
+          !matches(ox, oy + CAPTCHA_BLOCK_HEIGHT - 1) ||
+          !matches(ox + CAPTCHA_BLOCK_WIDTH - 1, oy + CAPTCHA_BLOCK_HEIGHT - 1) ||
+          !matches(ox + Math.floor(CAPTCHA_BLOCK_WIDTH / 2), oy + Math.floor(CAPTCHA_BLOCK_HEIGHT / 2))) {
+        continue
+      }
+      return ((ox - 26) / width).toFixed(2)
     }
   }
   throw new Error("CAPTCHA_POSITION_NOT_FOUND")
@@ -162,7 +216,13 @@ async function createAndVerifyCaptcha(mobile: string): Promise<CaptchaChallenge>
   currentHeadersX = headersX
   persistHeadersX()
 
-  const position = findCaptchaPosition(data.backGroundImg)
+  let position: string
+  try {
+    position = findCaptchaPosition(data.backGroundImg)
+  } catch {
+    // 像素识别失败（含 Scripting 3.2.0 无 getPixelData）：退回随机位置尝试提交，不阻塞登录流程
+    position = randomCaptchaX()
+  }
   const verified = await requestJSON<unknown>("/eadrax-coas/v2/cop/verify-captcha", {
     method: "POST",
     headers: headersX,
