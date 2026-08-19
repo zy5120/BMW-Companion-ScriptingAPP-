@@ -54,6 +54,12 @@ declare const Dialog: {
 
 type Operation = "idle" | "sendingSms" | "passwordLogin" | "smsLogin" | "switching"
 
+// 本地日期 YYYY-MM-DD（用本地时区，避免 UTC 跨日误差）
+function todayDateString(): string {
+  const d = new Date()
+  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`
+}
+
 function errorMessage(error: unknown): string {
   const code = error instanceof Error ? error.message : String(error)
   const known: Record<string, string> = {
@@ -282,11 +288,11 @@ export function ConnectionPage() {
     }
   }
 
-  // 加群提示横幅（可关闭，关闭状态持久保存）
-  const [groupBannerDismissed, setGroupBannerDismissed] = useState(Boolean(loadSettings().dismissGroupBanner))
+  // 加群提示横幅：关闭后当天不再显示，次日恢复（记录关闭日期）
+  const [groupBannerHidden, setGroupBannerHidden] = useState(() => loadSettings().groupBannerDismissedDate === todayDateString())
   const dismissGroupBanner = () => {
-    setGroupBannerDismissed(true)
-    saveSettings({ ...loadSettings(), dismissGroupBanner: true })
+    setGroupBannerHidden(true)
+    saveSettings({ ...loadSettings(), groupBannerDismissedDate: todayDateString() })
   }
 
   const signOut = async () => {
@@ -317,7 +323,7 @@ export function ConnectionPage() {
         ],
       }}
     >
-      {!groupBannerDismissed ? (
+      {!groupBannerHidden ? (
         <Section header={<Text font="headline">加群交流</Text>}>
           <HStack spacing={10}>
             <Image systemName="person.3.fill" font="title3" foregroundStyle={ACCENT} />

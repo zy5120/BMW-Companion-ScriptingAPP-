@@ -117,8 +117,8 @@ export interface CompanionSettings {
   alwaysDarkBackground?: boolean
   // 手动能源类型覆盖（按 VIN 兑底，key 为 VIN；自动识别失败/有误时用户可手动指定）
   energyTypeOverrides?: Record<string, "fuel" | "electric" | "hybrid">
-  // 连接页加群提示横幅是否已关闭（关闭后不再显示）
-  dismissGroupBanner?: boolean
+  // 连接页加群提示横幅最近一次关闭的日期（YYYY-MM-DD）：当天关闭后不再显示，次日恢复
+  groupBannerDismissedDate?: string
 }
 
 export interface WidgetParameter {
