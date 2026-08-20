@@ -599,7 +599,9 @@ async function loadLogo(brand: "BMW" | "MINI" = "BMW"): Promise<UIImage | null> 
 async function refreshWidgetSnapshotIfStale(snapshot: VehicleSnapshot): Promise<VehicleSnapshot> {
   if (snapshot.source === "network") {
     const age = Date.now() - Date.parse(snapshot.cachedAt)
-    if (Number.isFinite(age) && age < 30 * 60 * 1000) return snapshot
+    // 刷新间隔可在「设置 → 刷新间隔」自定义（默认 30 分钟）
+    const intervalMinutes = loadSettings().refreshIntervalMinutes ?? 30
+    if (Number.isFinite(age) && age < intervalMinutes * 60 * 1000) return snapshot
   }
   try {
     const session = loadSession()

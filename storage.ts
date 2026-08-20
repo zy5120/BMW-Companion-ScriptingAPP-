@@ -28,6 +28,7 @@ export const defaultSettings: CompanionSettings = {
   privacyMode: false,
   freshnessMinutes: 15,
   staleHours: 6,
+  refreshIntervalMinutes: 30,
   defaultVehicleId: "demo-bmw-i4",
   selectedVin: "",
   noTiresLine1: "",

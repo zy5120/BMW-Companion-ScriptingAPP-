@@ -15,6 +15,7 @@ import {
   Navigation,
   NavigationLink,
   NavigationStack,
+  Picker,
   ProgressView,
   ScrollView,
   Script,
@@ -788,6 +789,13 @@ function SettingsPage() {
     saveSettings({ ...loadSettings(), alwaysDarkBackground: value })
     Widget.reloadAll()
   }
+  // 组件刷新间隔（分钟）：快照超过该时长未更新时，组件渲染时自动拉新
+  const [refreshMinutes, setRefreshMinutes] = useState(settings0.refreshIntervalMinutes ?? 30)
+  const persistRefreshMinutes = (value: number) => {
+    setRefreshMinutes(value)
+    saveSettings({ ...loadSettings(), refreshIntervalMinutes: value })
+    Widget.reloadAll()
+  }
   const connectionDestination = useMemo(() => <ConnectionPage />, [])
   // 点击「关于 → 版本」弹出更新日志
   const [showChangelog, setShowChangelog] = useState(false)
@@ -825,6 +833,23 @@ function SettingsPage() {
         footer={<Text font="caption">开启后，即使手机处于浅色模式，桌面组件也始终显示深色背景（文字颜色会同步调整，保证可读）。</Text>}
       >
         <Toggle title="浅色模式下也显示深色背景" value={alwaysDark} onChanged={persistAlwaysDark} />
+      </Section>
+      <Section
+        header={<Text font="headline">刷新间隔</Text>}
+        footer={<Text font="caption">组件超过该时长未更新数据时，会在系统刷新时自动拉取最新车况。数值越小越及时，但会更频繁请求宝马服务。</Text>}
+      >
+        <Picker
+          value={String(refreshMinutes)}
+          onChanged={(value: string) => persistRefreshMinutes(Number(value))}
+          pickerStyle="menu"
+          title="刷新间隔"
+          systemImage="arrow.clockwise"
+        >
+          <Text tag="15">15 分钟</Text>
+          <Text tag="30">30 分钟</Text>
+          <Text tag="60">60 分钟</Text>
+          <Text tag="120">2 小时</Text>
+        </Picker>
       </Section>
       <Section
         header={<Text font="headline">关于</Text>}

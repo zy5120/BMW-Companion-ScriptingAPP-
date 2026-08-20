@@ -101,6 +101,8 @@ export interface CompanionSettings {
   privacyMode: boolean
   freshnessMinutes: number
   staleHours: number
+  // 组件自动刷新间隔（分钟）：快照超过该时长未更新时，组件渲染时自动拉新
+  refreshIntervalMinutes?: number
   defaultVehicleId: string
   selectedVin?: string
   // 无胎压数据时的占位文案（部分车型不返回胎压，组件空出两行时显示）
