@@ -26,6 +26,7 @@ import {
   Toggle,
   VStack,
   Widget,
+  ZStack,
   useEffect,
   useMemo,
   useObservable,
@@ -447,7 +448,8 @@ function VehicleHeader({ snapshot, refreshing = false, refreshResult = null }: {
 
 function StatusDetailsPage({ showClose = false }: { showClose?: boolean }) {
   const dismiss = Navigation.useDismiss()
-  const snapshot = loadSnapshot()
+  const [snapshot, setSnapshot] = useState(() => loadSnapshot())
+  const [refreshing, setRefreshing] = useState(false)
   const safety = safetySummary(snapshot)
   // 是否有后排数据：左后/右后均非 unknown → 四门车，按四格展示；否则两门车，左前/右前改名左门/右门
   const hasRearDoors = Boolean(snapshot.access.doorStates &&
@@ -456,10 +458,34 @@ function StatusDetailsPage({ showClose = false }: { showClose?: boolean }) {
   const hasRearWindows = Boolean(snapshot.access.windowStates &&
     snapshot.access.windowStates.leftRear !== "unknown" &&
     snapshot.access.windowStates.rightRear !== "unknown")
+  // 下拉刷新：从宝马服务重新拉取该车快照（失败沿用当前数据）
+  const refreshStatus = async () => {
+    if (refreshing) return
+    setRefreshing(true)
+    try {
+      const session = loadSession()
+      if (!session) { setSnapshot(() => loadSnapshot()); return }
+      let usable = session
+      if (Date.parse(session.accessTokenExpiresAt) <= Date.now() + 60_000) {
+        usable = await renewSession(session)
+        saveSession(usable)
+      }
+      const next = await fetchFirstVehicleSnapshot(usable, loadSettings().selectedVin || undefined)
+      saveConnectedSnapshot(next)
+      setRuntimeMode("connected")
+      setSnapshot(next)
+      if (next.location) void refreshMapSnapshot(next.location.latitude, next.location.longitude)
+    } catch {
+      // 失败沿用旧数据
+    } finally {
+      setRefreshing(false)
+    }
+  }
   return (
     <List
       navigationTitle="车辆状态"
       navigationBarTitleDisplayMode="inline"
+      refreshable={refreshStatus}
       toolbar={showClose ? {
         topBarLeading: [
           <Button
@@ -913,24 +939,37 @@ function LocationMapCard({ snapshot }: { snapshot: VehicleSnapshot }) {
     { center, span: { latitudeDelta: 0.001, longitudeDelta: 0.001 } },
     { minimumDistance: 200, maximumDistance: 250 },
   )
+  // 单击地图 → 在系统地图 App 中打开车辆位置
+  const openInMaps = () => {
+    const { latitude, longitude } = snapshot.location!
+    const coord = `${latitude},${longitude}`
+    const name = encodeURIComponent(snapshot.identity.displayName)
+    void Safari.openURL(`maps://?ll=${coord}&q=${coord}(${name})`)
+  }
   return (
     <VStack alignment="leading" spacing={8}>
       <Text font="title3" fontWeight="bold">车辆位置</Text>
-      <Map
-        cameraPosition={camera}
-        cameraBounds={bounds}
-        allowsHitTesting={false}
-        mapStyle={{ style: "standard", showsTraffic: false }}
+      <ZStack
         frame={{ maxWidth: Infinity, height: 220 }}
         clipShape={{ type: "rect", cornerRadius: 20 }}
+        onTapGesture={openInMaps}
+        accessibilityLabel="在系统地图中打开车辆位置"
       >
-        <Marker
-          title={snapshot.identity.displayName}
-          coordinate={center}
-          systemImage="car.fill"
-          tint={ACCENT}
-        />
-      </Map>
+        <Map
+          cameraPosition={camera}
+          cameraBounds={bounds}
+          allowsHitTesting={false}
+          mapStyle={{ style: "standard", showsTraffic: false }}
+          frame={{ maxWidth: Infinity }}
+        >
+          <Marker
+            title={snapshot.identity.displayName}
+            coordinate={center}
+            systemImage="car.fill"
+            tint={ACCENT}
+          />
+        </Map>
+      </ZStack>
       <Text font="caption" foregroundStyle="secondaryLabel">
         {displayAddress(snapshot, false)} · 最近同步 {formatSyncTime(snapshot.vehicleObservedAt)}
       </Text>
@@ -1016,17 +1055,12 @@ function DashboardPage() {
           />,
         ],
         topBarTrailing: [
-          <Button
-            title={refreshing ? "正在刷新" : loadSession() ? `刷新 ${brand} 车况` : "刷新演示数据"}
-            systemImage="arrow.clockwise"
-            disabled={refreshing}
-            action={() => void refresh()}
-          />,
           <NavigationLink destination={settingsDestination}>
             <Image systemName="gearshape.fill" foregroundStyle={ACCENT} />
           </NavigationLink>,
         ],
       }}
+      refreshable={refresh}
     >
       <VStack alignment="leading" spacing={16} padding={{ horizontal: 16, top: 10, bottom: 28 }}>
         <VehicleHeader snapshot={snapshot} refreshing={refreshing} refreshResult={refreshResult} />
