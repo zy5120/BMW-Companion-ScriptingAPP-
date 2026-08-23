@@ -46,6 +46,9 @@ export interface VehicleSnapshot {
     // Number for fuel/electric-only; string (e.g. "6.5 L/100km · 14.2 kWh/100km") for hybrids.
     consumption?: number | string
     consumptionUnit?: string
+    // 能耗按类别展示文本（上次行程 / 本月平均；存在则按设置立即切换）
+    consumptionLastTrip?: string
+    consumptionMonthly?: string
     // 48V 轻混平台（显示为燃油车，但标注轻混）
     mildHybrid?: boolean
   }
@@ -121,6 +124,8 @@ export interface CompanionSettings {
   energyTypeOverrides?: Record<string, "fuel" | "electric" | "hybrid">
   // 连接页加群提示横幅最近一次关闭的日期（YYYY-MM-DD）：当天关闭后不再显示，次日恢复
   groupBannerDismissedDate?: string
+  // 油耗显示：选择显示的类别（上次行程 / 本月平均）
+  fuelConsumptionMode?: "lastTrip" | "monthly"
 }
 
 export interface WidgetParameter {

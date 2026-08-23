@@ -320,6 +320,12 @@ function EnergyHero({ snapshot }: { snapshot: VehicleSnapshot }) {
   const level = snapshot.energy.levelPercent ?? 0
   const range = snapshot.energy.rangeKm
   const electric = snapshot.energy.type === "electric"
+  // 能耗按设置选择类别展示（上次行程 / 本月平均）
+  const consumptionMode = loadSettings().fuelConsumptionMode ?? "lastTrip"
+  const consumptionLabel = consumptionMode === "monthly" ? "本月平均" : "上次行程"
+  const consumptionText = consumptionMode === "monthly"
+    ? (snapshot.energy.consumptionMonthly ?? snapshot.energy.consumptionLastTrip)
+    : (snapshot.energy.consumptionLastTrip ?? snapshot.energy.consumptionMonthly)
   const [carImage, setCarImage] = useState<UIImage | null>(null)
   useEffect(() => {
     let cancelled = false
@@ -355,9 +361,7 @@ function EnergyHero({ snapshot }: { snapshot: VehicleSnapshot }) {
         <HStack spacing={5}>
           <Image systemName={electric ? "bolt.car.fill" : "fuelpump.fill"} font="caption" foregroundStyle={ACCENT} />
           <Text font="caption" foregroundStyle="secondaryLabel">
-            {snapshot.energy.consumption != null
-              ? `${snapshot.energy.consumption}${snapshot.energy.consumptionUnit ? ` ${snapshot.energy.consumptionUnit}` : ""}`
-              : "能耗不可用"}
+            {consumptionText != null ? `${consumptionLabel} · ${consumptionText}` : "能耗不可用"}
           </Text>
         </HStack>
       </VStack>
@@ -822,6 +826,13 @@ function SettingsPage() {
     saveSettings({ ...loadSettings(), refreshIntervalMinutes: value })
     Widget.reloadAll()
   }
+  // 油耗显示：选择显示的类别（上次行程 / 本月平均）
+  const [fuelConsumptionMode, setFuelConsumptionMode] = useState<"lastTrip" | "monthly">(settings0.fuelConsumptionMode ?? "lastTrip")
+  const persistFuelConsumptionMode = (value: "lastTrip" | "monthly") => {
+    setFuelConsumptionMode(value)
+    saveSettings({ ...loadSettings(), fuelConsumptionMode: value })
+    Widget.reloadAll()
+  }
   const connectionDestination = useMemo(() => <ConnectionPage />, [])
   // 点击「关于 → 版本」弹出更新日志
   const [showChangelog, setShowChangelog] = useState(false)
@@ -875,6 +886,21 @@ function SettingsPage() {
           <Text tag="30">30 分钟</Text>
           <Text tag="60">60 分钟</Text>
           <Text tag="120">2 小时</Text>
+        </Picker>
+      </Section>
+      <Section
+        header={<Text font="headline">油耗显示</Text>}
+        footer={<Text font="caption">选择车况页与组件中显示能耗的类别。</Text>}
+      >
+        <Picker
+          value={fuelConsumptionMode}
+          onChanged={(value: string) => persistFuelConsumptionMode(value as "lastTrip" | "monthly")}
+          pickerStyle="menu"
+          title="油耗显示"
+          systemImage="flame.fill"
+        >
+          <Text tag="lastTrip">上次行程</Text>
+          <Text tag="monthly">本月平均</Text>
         </Picker>
       </Section>
       <Section

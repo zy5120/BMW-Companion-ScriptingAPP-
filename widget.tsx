@@ -123,10 +123,15 @@ function fuelLevelText(snapshot: VehicleSnapshot): string {
 }
 
 function consumptionText(snapshot: VehicleSnapshot): string {
-  if (snapshot.energy.consumption == null) return "—"
+  // 按设置选择类别：上次行程 / 本月平均（设置里可切换）
+  const mode = loadSettings().fuelConsumptionMode ?? "lastTrip"
+  const raw = mode === "monthly"
+    ? snapshot.energy.consumptionMonthly ?? snapshot.energy.consumptionLastTrip
+    : snapshot.energy.consumptionLastTrip ?? snapshot.energy.consumptionMonthly
+  if (raw == null) return "—"
   // 中号/大号组件空间有限，去掉“/100km”后缀（如 L/100km → L，kWh/100km → kWh；
   // 混动的字符串油耗同样去掉，如 “6.5 L/100km · 14.2 kWh/100km” → “6.5 L · 14.2 kWh”）。
-  return `${snapshot.energy.consumption}${snapshot.energy.consumptionUnit ? ` ${snapshot.energy.consumptionUnit}` : ""}`.replace(/\/100km/g, "")
+  return raw.replace(/\/100km/g, "")
 }
 
 // 按车型返回“油量/电量”文本：燃油车→%，纯电车→%，混动车→L/%。

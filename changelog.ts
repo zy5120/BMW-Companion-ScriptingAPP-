@@ -1,5 +1,5 @@
 // 版本号与更新日志（用于「更新展示」sheet 与设置页版本号）
-export const CURRENT_VERSION = "0.3.9"
+export const CURRENT_VERSION = "0.4.0"
 
 export interface VersionNote {
   version: string
@@ -10,6 +10,14 @@ export interface VersionNote {
 // 按新→旧排列，最多保留近 5 条（slice 兜底，超出自动截断；发版时也建议删除最旧条目）。
 // 新增版本时在顶部加一条，并把 CURRENT_VERSION 同步更新。
 export const CHANGELOG: VersionNote[] = [
+  {
+    version: "0.4.0",
+    title: "油耗显示分类",
+    notes: [
+      "设置新增油耗显示：上次行程 / 本月平均",
+      "修复油耗读取字段，数值更准确",
+    ],
+  },
   {
     version: "0.3.9",
     title: "地图跳转名称修复",

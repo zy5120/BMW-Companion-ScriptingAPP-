@@ -39,6 +39,7 @@ export const defaultSettings: CompanionSettings = {
   lastSeenVersion: "",
   alwaysDarkBackground: false,
   energyTypeOverrides: {},
+  fuelConsumptionMode: "lastTrip",
 }
 
 export function loadSettings(): CompanionSettings {

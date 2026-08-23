@@ -754,6 +754,13 @@ function buildMaintenanceChecks(items: MaintenanceItem[]): VehicleCheck[] {
 interface ConsumptionInfo {
   value: number | string
   unit: string
+  lastTrip?: string
+  monthly?: string
+}
+
+// 读取接口现成的平均油耗字段（不推算）
+function consumptionRate(obj: Record<string, any> | undefined): number | undefined {
+  return finiteNumber(obj?.averageConsumption)
 }
 
 // Mirrors the reference widget's sustainability() call:
@@ -776,44 +783,39 @@ async function fetchConsumption(
     })
     const result = response as {
       status?: unknown
+      efficiencyStatisticsKpi?: { value?: unknown; unit?: unknown }
       widget?: {
-        monthly?: Record<string, any>
         lastTrip?: {
-          fuelConsumption?: { averageConsumption?: unknown }
-          electricConsumption?: { averageConsumption?: unknown }
+          fuelConsumption?: Record<string, any>
+          electricConsumption?: Record<string, any>
         }
+        monthly?: Record<string, any>
       }
     }
-    if (result?.status !== "Success" || !result.widget?.lastTrip) return undefined
-    const monthly = result.widget.monthly ?? {}
-    const lastTrip = result.widget.lastTrip
-    const hasElectric = Object.prototype.hasOwnProperty.call(monthly, "totalElectricConsumption")
-    const hasCombustion = Object.prototype.hasOwnProperty.call(monthly, "totalCombustionConsumption")
-    const fuelValue = finiteNumber(lastTrip.fuelConsumption?.averageConsumption)
-    const electricValue = finiteNumber(lastTrip.electricConsumption?.averageConsumption)
+    if (result?.status !== "Success" || !result.widget) return undefined
+    const widget = result.widget
+    const electric = fuelType === "electric"
     const round = (value: number) => Math.round(value * 10) / 10
 
-    // 油电混合：两个月度字段都存在 → 能耗（油耗 + 电耗一起展示）
-    if (hasElectric && hasCombustion) {
-      const parts: string[] = []
-      if (fuelValue != null && fuelValue > 0) parts.push(`${fuelValue.toFixed(1)} L/100km`)
-      if (electricValue != null && electricValue > 0) parts.push(`${electricValue.toFixed(1)} kWh/100km`)
-      return parts.length ? { value: parts.join(" · "), unit: "" } : undefined
+    // 每种类别取接口现成的平均字段；油耗/电耗分别处理
+    const build = (obj: Record<string, any> | undefined, unit: string): string | undefined => {
+      const num = consumptionRate(obj)
+      if (num == null || num <= 0) return undefined
+      return `${round(num)} ${unit}`
     }
-    // 纯电 → 电耗
-    if (hasElectric) {
-      if (electricValue != null && electricValue > 0) return { value: round(electricValue), unit: "kWh/100km" }
-      return undefined
-    }
-    // 纯油（或状态判断为油车）→ 油耗
-    if (hasCombustion || fuelType === "fuel" || fuelType === "hybrid") {
-      if (fuelValue != null && fuelValue > 0) return { value: round(fuelValue), unit: "L/100km" }
-      return undefined
-    }
-    if (fuelType === "electric" && electricValue != null && electricValue > 0) {
-      return { value: round(electricValue), unit: "kWh/100km" }
-    }
-    return undefined
+    const lastFuel = build(widget.lastTrip?.fuelConsumption, electric ? "kWh/100km" : "L/100km")
+    const lastElec = build(widget.lastTrip?.electricConsumption, "kWh/100km")
+    const monFuel = build(widget.monthly?.totalCombustionConsumption, electric ? "kWh/100km" : "L/100km")
+    const monElec = build(widget.monthly?.totalElectricConsumption, "kWh/100km")
+
+    // 上次行程（默认展示）：燃油+电耗并存则合并，缺省显示可用的
+    const lastText = [lastFuel, lastElec].filter(Boolean).join(" · ") || undefined
+    // 本月平均
+    const monthText = [monFuel, monElec].filter(Boolean).join(" · ") || undefined
+
+    const primary = lastText ?? monthText
+    if (!primary) return undefined
+    return { value: primary, unit: "", lastTrip: lastText, monthly: monthText }
   } catch (error) {
     console.warn("sustainability unavailable:", error instanceof Error ? error.message : String(error))
     return undefined
@@ -926,6 +928,8 @@ export async function fetchFirstVehicleSnapshot(
   if (consumption) {
     snapshot.energy.consumption = consumption.value
     snapshot.energy.consumptionUnit = consumption.unit
+    if (consumption.lastTrip != null) snapshot.energy.consumptionLastTrip = consumption.lastTrip
+    if (consumption.monthly != null) snapshot.energy.consumptionMonthly = consumption.monthly
   }
   // 保养提醒：即将到期/已到期的 CBS 保养项加入「需要关注」
   const maintenance = await fetchMaintenance(session, vin, brand)
