@@ -939,12 +939,11 @@ function LocationMapCard({ snapshot }: { snapshot: VehicleSnapshot }) {
     { center, span: { latitudeDelta: 0.001, longitudeDelta: 0.001 } },
     { minimumDistance: 200, maximumDistance: 250 },
   )
-  // 单击地图 → 在系统地图 App 中打开车辆位置
+  // 单击地图 → 在系统地图 App 中打开车辆位置（ll 定位到原坐标，q 只显示车辆名称）
   const openInMaps = () => {
     const { latitude, longitude } = snapshot.location!
-    const coord = `${latitude},${longitude}`
     const name = encodeURIComponent(snapshot.identity.displayName)
-    void Safari.openURL(`maps://?ll=${coord}&q=${coord}(${name})`)
+    void Safari.openURL(`maps://?ll=${latitude},${longitude}&q=${name}&z=16`)
   }
   return (
     <VStack alignment="leading" spacing={8}>
@@ -952,6 +951,7 @@ function LocationMapCard({ snapshot }: { snapshot: VehicleSnapshot }) {
       <ZStack
         frame={{ maxWidth: Infinity, height: 220 }}
         clipShape={{ type: "rect", cornerRadius: 20 }}
+        contentShape={{ type: "rect", cornerRadii: { topLeading: 20, bottomLeading: 20, bottomTrailing: 20, topTrailing: 20 } }}
         onTapGesture={openInMaps}
         accessibilityLabel="在系统地图中打开车辆位置"
       >
