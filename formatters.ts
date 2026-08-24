@@ -52,8 +52,9 @@ export interface LockInfo {
 }
 
 // 锁车状态唯一来源：车况页卡片、详情页、小组件共用同一逻辑
-// 统一文案：已上锁 / 已解锁 / 锁车状态未知
-export function lockInfo(snapshot: { access: { lock: LockState } }): LockInfo {
+// 统一文案：已上锁 / 已解锁 / 锁车状态未知；车辆行驶中则显示“行驶中”
+export function lockInfo(snapshot: { access: { lock: LockState }; driving?: boolean }): LockInfo {
+  if (snapshot.driving) return { text: "行驶中", locked: false, unknown: false }
   if (snapshot.access.lock === "unknown") return { text: "锁车状态未知", locked: false, unknown: true }
   const locked = snapshot.access.lock === "locked"
   return { text: locked ? "已上锁" : "已解锁", locked, unknown: false }

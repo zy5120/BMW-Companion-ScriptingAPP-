@@ -33,6 +33,8 @@ export interface VehicleSnapshot {
     plateMasked?: string
     plate?: string
   }
+  // 车辆是否行驶中（state.pwf === "DRIVING"；行驶时车况页锁车位显示“行驶中”）
+  driving?: boolean
   energy: {
     type: EnergyType
     // 主量（组件用）：油车=油量%，电车=电量%，混动=电量%

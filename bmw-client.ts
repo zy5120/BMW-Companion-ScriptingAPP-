@@ -651,6 +651,7 @@ function chargingState(electric: Record<string, any>): "charging" | "complete" |
       mildHybrid,
     },
     mileageKm: finiteNumber(state.currentMileage),
+    driving: state.pwf === "DRIVING",
     access: {
       lock: lockState(doors.combinedSecurityState),
       doors: knownState(doors.combinedState),
