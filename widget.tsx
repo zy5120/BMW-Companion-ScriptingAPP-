@@ -222,8 +222,8 @@ function CarView({ car, maxHeight = 108 }: { car: UIImage | null; maxHeight?: nu
 
 function LockRow({ snapshot, showUpdate = true }: { snapshot: VehicleSnapshot; showUpdate?: boolean }) {
   const info = lockInfo(snapshot)
-  const color = info.unknown ? "#8E8E93" : info.locked ? "#30D158" : "#FF453A"
-  const icon = info.locked ? "lock.shield.fill" : "xmark.shield.fill"
+  const color = info.driving ? "#0A84FF" : info.unknown ? "#8E8E93" : info.locked ? "#30D158" : "#FF453A"
+  const icon = info.driving ? "car.fill" : info.locked ? "lock.shield.fill" : "xmark.shield.fill"
   return (
     <HStack
       spacing={5}
@@ -273,9 +273,9 @@ function AccessoryRectangular({ snapshot, logo }: { snapshot: VehicleSnapshot; l
       </HStack>
       <HStack spacing={4}>
         <Image
-          systemName={info.locked ? "lock.shield.fill" : "xmark.shield.fill"}
+          systemName={info.driving ? "car.fill" : info.locked ? "lock.shield.fill" : "xmark.shield.fill"}
           font={9}
-          foregroundStyle={(info.locked ? "#30D158" : "#FF453A") as any}
+          foregroundStyle={(info.driving ? "#0A84FF" : info.locked ? "#30D158" : "#FF453A") as any}
         />
         <Text font="caption2" lineLimit={1}>{info.text} · {formatSyncTime(snapshot.vehicleObservedAt)}</Text>
       </HStack>
@@ -287,8 +287,8 @@ function AccessoryRectangular({ snapshot, logo }: { snapshot: VehicleSnapshot; l
 
 function SmallWidget({ snapshot, car }: { snapshot: VehicleSnapshot; car: UIImage | null }) {
   const info = lockInfo(snapshot)
-  const lockColor = info.unknown ? "#8E8E93" : info.locked ? "#30D158" : "#FF453A"
-  const lockIcon = info.locked ? "lock.shield.fill" : "xmark.shield.fill"
+  const lockColor = info.driving ? "#0A84FF" : info.unknown ? "#8E8E93" : info.locked ? "#30D158" : "#FF453A"
+  const lockIcon = info.driving ? "car.fill" : info.locked ? "lock.shield.fill" : "xmark.shield.fill"
   const model = snapshot.identity.model ?? snapshot.identity.displayName
   const rangeText = snapshot.energy.rangeKm != null ? `${snapshot.energy.rangeKm}km` : "—km"
   const fuelText = energySecondaryText(snapshot)
@@ -504,8 +504,8 @@ function TireCell({ label, tire }: { label: string; tire?: { pressureBar?: numbe
 
 function LockBadge({ snapshot }: { snapshot: VehicleSnapshot }) {
   const info = lockInfo(snapshot)
-  const color = info.unknown ? "#8E8E93" : info.locked ? "#30D158" : "#FF453A"
-  const icon = info.locked ? "lock.shield.fill" : "xmark.shield.fill"
+  const color = info.driving ? "#0A84FF" : info.unknown ? "#8E8E93" : info.locked ? "#30D158" : "#FF453A"
+  const icon = info.driving ? "car.fill" : info.locked ? "lock.shield.fill" : "xmark.shield.fill"
   return (
     <HStack spacing={3} padding={{ horizontal: 7, vertical: 3 }} background={`${color}1A` as any} clipShape={{ type: "capsule", style: "continuous" }}>
       <Image systemName={icon} font={9} foregroundStyle={color as any} />
@@ -620,7 +620,7 @@ async function refreshWidgetSnapshotIfStale(snapshot: VehicleSnapshot): Promise<
     saveConnectedSnapshot(next)
     setRuntimeMode("connected")
     if (next.location) {
-      void refreshMapSnapshot(next.location.latitude, next.location.longitude)
+      void refreshMapSnapshot(next.location.latitude, next.location.longitude, next.identity.displayName)
     }
     return next
   } catch {

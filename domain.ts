@@ -128,6 +128,8 @@ export interface CompanionSettings {
   groupBannerDismissedDate?: string
   // 油耗显示：选择显示的类别（上次行程 / 本月平均）
   fuelConsumptionMode?: "lastTrip" | "monthly"
+  // 连接页一次性公告（作者 QQ 被封号提示）是否已关闭：关闭后永久不再显示
+  authorNoticeDismissed?: boolean
 }
 
 export interface WidgetParameter {

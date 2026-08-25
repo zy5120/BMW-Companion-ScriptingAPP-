@@ -478,7 +478,7 @@ function StatusDetailsPage({ showClose = false }: { showClose?: boolean }) {
       saveConnectedSnapshot(next)
       setRuntimeMode("connected")
       setSnapshot(next)
-      if (next.location) void refreshMapSnapshot(next.location.latitude, next.location.longitude)
+      if (next.location) void refreshMapSnapshot(next.location.latitude, next.location.longitude, next.identity.displayName)
     } catch {
       // 失败沿用旧数据
     } finally {
@@ -684,7 +684,7 @@ function LocationPage({ showClose = false }: { showClose?: boolean }) {
 
   const updateWidgetMap = async () => {
     if (!location) return
-    const ok = await refreshMapSnapshot(location.latitude, location.longitude)
+    const ok = await refreshMapSnapshot(location.latitude, location.longitude, snapshot.identity.displayName)
     void Dialog?.alert?.({
       title: ok ? "已更新" : "更新失败",
       message: ok ? "停车位置地图已更新，桌面大号组件将显示。" : "地图生成失败，请稍后重试。",
@@ -1047,7 +1047,7 @@ function DashboardPage() {
       Widget.reloadAll()
       // 自动生成停车位置地图快照（离屏渲染），供桌面大号组件使用
       if (next.location) {
-        void refreshMapSnapshot(next.location.latitude, next.location.longitude)
+        void refreshMapSnapshot(next.location.latitude, next.location.longitude, next.identity.displayName)
       }
     } catch {
       setRefreshResult("failure")
@@ -1101,7 +1101,7 @@ function DashboardPage() {
         >
           <NavigationLink destination={detailsDestination} frame={{ maxWidth: Infinity }}>
             <MetricCard
-              icon={snapshot.access.lock === "locked" ? "lock.shield.fill" : "lock.open.fill"}
+              icon={snapshot.driving ? "car.fill" : snapshot.access.lock === "locked" ? "lock.shield.fill" : "lock.open.fill"}
               title="车辆安全"
               value={lockInfo(snapshot).text}
               subtitle={doorWindowSummary(snapshot)}

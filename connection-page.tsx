@@ -234,7 +234,7 @@ export function ConnectionPage() {
     void reloadVehicles()
     // 登录成功后自动生成停车位置地图快照，供桌面大号组件使用
     if (snapshot.location) {
-      void refreshMapSnapshot(snapshot.location.latitude, snapshot.location.longitude)
+      void refreshMapSnapshot(snapshot.location.latitude, snapshot.location.longitude, snapshot.identity.displayName)
     }
   }
 
@@ -295,6 +295,13 @@ export function ConnectionPage() {
     saveSettings({ ...loadSettings(), groupBannerDismissedDate: todayDateString() })
   }
 
+  // 作者一次性公告：关闭后永久不再显示（仅一次）
+  const [authorNoticeHidden, setAuthorNoticeHidden] = useState(() => loadSettings().authorNoticeDismissed === true)
+  const dismissAuthorNotice = () => {
+    setAuthorNoticeHidden(true)
+    saveSettings({ ...loadSettings(), authorNoticeDismissed: true })
+  }
+
   const signOut = async () => {
     const accepted = await Dialog.confirm({
       title: "退出 BMW 会话？",
@@ -323,6 +330,27 @@ export function ConnectionPage() {
         ],
       }}
     >
+      {!authorNoticeHidden ? (
+        <Section header={<Text font="headline">作者公告</Text>}>
+          <HStack spacing={10}>
+            <Image systemName="exclamationmark.triangle.fill" font="title3" foregroundStyle="#FF9F0A" />
+            <VStack alignment="leading" spacing={2} frame={{ maxWidth: Infinity, alignment: "leading" }}>
+              <Text font="subheadline" fontWeight="semibold">脚本作者 QQ 暂时失联</Text>
+              <Text font="caption" foregroundStyle="secondaryLabel">
+                脚本作者因 QQ 使用外挂被平台封号 15 天（9 月 6 日解锁），请稍等几天。
+              </Text>
+            </VStack>
+            <Button
+              title=""
+              systemImage="xmark.circle.fill"
+              action={dismissAuthorNotice}
+              foregroundStyle="secondaryLabel"
+              accessibilityLabel="关闭作者公告"
+            />
+          </HStack>
+        </Section>
+      ) : null}
+
       {!groupBannerHidden ? (
         <Section header={<Text font="headline">加群交流</Text>}>
           <HStack spacing={10}>

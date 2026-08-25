@@ -1,4 +1,4 @@
-import { Image, HStack, VStack, ZStack, ImageRenderer, Script, Widget } from "scripting"
+import { Image, Text, HStack, VStack, ZStack, ImageRenderer, Script, Widget } from "scripting"
 import { loadSettings, scriptKeyNamespace } from "./storage"
 
 // 桌面大号组件使用的地图快照路径（App Group 共享目录，组件可读）；
@@ -24,6 +24,7 @@ async function renderOpenSourceMap(
   width: number,
   height: number,
   dark: boolean,
+  vehicleName = "车辆位置",
 ): Promise<UIImage | null> {
   const z = 16
   const tile = (x: number, y: number) => dark
@@ -33,7 +34,7 @@ async function renderOpenSourceMap(
   const fy = latToY(latitude, z)
   const x0 = Math.floor(fx) - 2
   const y0 = Math.floor(fy) - 1
-  const cols = 4
+  const cols = 5
   const rows = 3
   // 失败瓦片用灰色占位图，保证网格完整（全部成功时用真实瓦片）
   const blank = await ImageRenderer.toUIImage(
@@ -66,11 +67,19 @@ async function renderOpenSourceMap(
   const cropY = Math.max(0, Math.min(grid.height - height, py - height / 2))
   const cropped = grid.croppedTo({ x: cropX, y: cropY, width, height })
   if (!cropped) return null
-  // 叠加居中蓝色车标（与 Pro 版 MapSnapshotter 的 car.fill 标注一致）
+  // 高德风格标签：蓝色圆针（白色小车 + 底部小尾巴）+ 车辆名，居中压在车辆位置
+  const nameColor = dark ? "#FFFFFF" : "#111827"
   return await ImageRenderer.toUIImage(
     <ZStack frame={{ width, height }}>
       <Image image={cropped} resizable scaleToFill frame={{ width, height }} />
-      <Image systemName="car.fill" font={24} foregroundStyle="#166DFF" />
+      <VStack alignment="center" spacing={2} frame={{ width, height }}>
+        <ZStack frame={{ width: 46, height: 46 }}>
+          <Image systemName="circle.fill" font={46} foregroundStyle="#166DFF" />
+          <Image systemName="car.fill" font={22} foregroundStyle="#FFFFFF" />
+        </ZStack>
+        <Image systemName="arrowtriangle.down.fill" font={15} foregroundStyle="#166DFF" />
+        <Text fontWeight="bold" foregroundStyle={nameColor}>{vehicleName}</Text>
+      </VStack>
     </ZStack>,
     { scale: 1 },
   )
@@ -82,6 +91,7 @@ async function renderOpenSourceMap(
 export async function refreshMapSnapshot(
   latitude: number,
   longitude: number,
+  vehicleName = "车辆位置",
   size = { width: 620, height: 440 },
 ): Promise<boolean> {
   const dark = loadSettings().alwaysDarkBackground === true || Device.colorScheme === "dark"
@@ -89,7 +99,7 @@ export async function refreshMapSnapshot(
   if (!Script.hasFullAccess()) {
     try {
       if (Script.env !== "index") return false // 组件/其他扩展无 UI 上下文
-      const img = await renderOpenSourceMap(latitude, longitude, size.width, size.height, dark)
+      const img = await renderOpenSourceMap(latitude, longitude, size.width, size.height, dark, vehicleName)
       if (!img) return false
       const png = img.toPNGData()
       if (!png) return false
@@ -116,7 +126,7 @@ export async function refreshMapSnapshot(
           coordinate: { latitude, longitude },
           tintColor: "#166DFF",
           glyph: "car.fill",
-          title: "车辆位置",
+          title: vehicleName,
         },
       ],
     })
