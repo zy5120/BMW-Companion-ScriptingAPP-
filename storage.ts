@@ -179,6 +179,7 @@ function isValidSnapshot(value: VehicleSnapshot | null): value is VehicleSnapsho
     value.schemaVersion === 1 &&
     value.localVehicleId &&
     value.identity?.displayName &&
+    value.access?.lock &&
     Array.isArray(value.checks) &&
     typeof value.cachedAt === "string" &&
     Number.isFinite(Date.parse(value.cachedAt)) &&

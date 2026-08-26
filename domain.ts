@@ -130,6 +130,9 @@ export interface CompanionSettings {
   fuelConsumptionMode?: "lastTrip" | "monthly"
   // 连接页一次性公告（作者 QQ 被封号提示）是否已关闭：关闭后永久不再显示
   authorNoticeDismissed?: boolean
+  // 大号组件最后一次生成的地图经纬度（用于位置跳变检测，更新时回写）
+  lastMapLocationLat?: number
+  lastMapLocationLng?: number
 }
 
 export interface WidgetParameter {

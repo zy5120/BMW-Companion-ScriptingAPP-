@@ -1,9 +1,17 @@
 import { Intent, Script } from "scripting"
 import { displayAddress, freshnessLabel, lockInfo, safetySummary } from "./formatters"
-import { getFreshness, loadSettings, loadWidgetSnapshot } from "./storage"
+import { makeDemoSnapshot } from "./fixtures"
+import { defaultSettings, getFreshness, loadSettings, loadWidgetSnapshot } from "./storage"
 
-const snapshot = loadWidgetSnapshot()
-const settings = loadSettings()
+// 存储损坏时兑底，避免快捷指令直接崩溃
+let snapshot = makeDemoSnapshot()
+let settings = defaultSettings
+try {
+  snapshot = loadWidgetSnapshot()
+  settings = loadSettings()
+} catch {
+  // 使用兑底快照与默认设置
+}
 const safety = safetySummary(snapshot)
 const requested = Intent.shortcutParameter?.value
 const wantsJSON = typeof requested === "string" && requested.toLowerCase().includes("json")

@@ -1,5 +1,5 @@
 import { Image, Text, HStack, VStack, ZStack, ImageRenderer, Script, Widget } from "scripting"
-import { loadSettings, scriptKeyNamespace } from "./storage"
+import { loadSettings, saveSettings, scriptKeyNamespace } from "./storage"
 
 // 桌面大号组件使用的地图快照路径（App Group 共享目录，组件可读）；
 // 文件名带脚本命名空间，多脚本各自使用自己的地图文件。
@@ -94,7 +94,19 @@ export async function refreshMapSnapshot(
   vehicleName = "车辆位置",
   size = { width: 620, height: 440 },
 ): Promise<boolean> {
-  const dark = loadSettings().alwaysDarkBackground === true || Device.colorScheme === "dark"
+  const settings = loadSettings()
+  // 位置未明显变动（≈44米）时直接复用上次快照，省流量省电
+  const latDiff = Math.abs(latitude - (settings.lastMapLocationLat ?? latitude))
+  const lngDiff = Math.abs(longitude - (settings.lastMapLocationLng ?? longitude))
+  const moved = latDiff > 0.0004 || lngDiff > 0.0004
+  if (!moved && settings.lastMapLocationLat != null && settings.lastMapLocationLng != null) {
+    const existing = UIImage.fromFile(mapSnapshotPath())
+    if (existing) {
+      Widget.reloadAll()
+      return true
+    }
+  }
+  const dark = settings.alwaysDarkBackground === true || Device.colorScheme === "dark"
   // 免费用户：不调用 PRO 的 MapSnapshotter，改走开源底图拼图，避免「解锁 Scripting PRO」弹窗
   if (!Script.hasFullAccess()) {
     try {
@@ -104,6 +116,7 @@ export async function refreshMapSnapshot(
       const png = img.toPNGData()
       if (!png) return false
       FileManager.writeAsDataSync(mapSnapshotPath(), png)
+      saveSettings({ ...settings, lastMapLocationLat: latitude, lastMapLocationLng: longitude })
       Widget.reloadAll()
       return true
     } catch (error) {
@@ -133,6 +146,7 @@ export async function refreshMapSnapshot(
     const png = snap.image.toPNGData()
     if (!png) return false
     FileManager.writeAsDataSync(mapSnapshotPath(), png)
+    saveSettings({ ...settings, lastMapLocationLat: latitude, lastMapLocationLng: longitude })
     Widget.reloadAll()
     return true
   } catch (error) {

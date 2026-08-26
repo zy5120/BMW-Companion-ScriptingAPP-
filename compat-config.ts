@@ -19,8 +19,9 @@ export const BMW_HEADERS: Record<string, string> = {
 
 // 车联网接口用 x-user-agent 里的品牌标识（bmw / mini）过滤车辆数据。
 // MINI 与宝马共用同一套 eadrax 接口，只是品牌标识不同（App 版本相同）。
+// 版本号与 BMW_CLIENT 保持一致，避免改版本时漏改。
 export function brandUserAgent(brand: "BMW" | "MINI"): string {
-  return `ios(17.6.1);${brand === "MINI" ? "mini" : "bmw"};5.14.0(58417);cn`
+  return `ios(17.6.1);${brand === "MINI" ? "mini" : "bmw"};${BMW_CLIENT.version}(${BMW_CLIENT.build});cn`
 }
 
 // Reference script values. Temporary compatibility only; never rotate/probe automatically.

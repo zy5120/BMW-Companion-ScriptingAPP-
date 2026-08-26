@@ -83,6 +83,8 @@ function errorMessage(error: unknown): string {
     NONCE_RESPONSE_INVALID: "辅助服务返回异常，请稍后重试。",
     VEHICLE_LIST_EMPTY: "账号下没有读取到车辆。",
     VEHICLE_STATE_INVALID: "车辆状态获取失败，请稍后重试。",
+    BMW_HTTP_401: "登录已过期，请在会话管理中退出后重新登录。",
+    BMW_HTTP_403: "BMW 拒绝了请求（403），请稍后重试或重新登录。",
   }
   if (known[code]) return known[code]
   if (code.startsWith("BMW_HTTP_")) return `BMW 请求失败（${code.replace("BMW_HTTP_", "HTTP ")}）。`
@@ -195,6 +197,10 @@ export function ConnectionPage() {
       setRuntimeMode("connected")
       Widget.reloadAll()
       setStatus(`已切换至 ${snapshot.identity.displayName}`)
+      // 切换车辆后刷新大号组件地图，避免地图仍显示上一辆车的位置
+      if (snapshot.location) {
+        void refreshMapSnapshot(snapshot.location.latitude, snapshot.location.longitude, snapshot.identity.displayName)
+      }
     } catch (error) {
       setSelectedVin(previous)
       setStatus(errorMessage(error))
@@ -246,7 +252,6 @@ export function ConnectionPage() {
     try {
       const session = await loginWithPassword(phone, password)
       await finishLogin(session)
-      setPassword("")
     } catch (error) {
       setStatus(errorMessage(error))
     } finally {

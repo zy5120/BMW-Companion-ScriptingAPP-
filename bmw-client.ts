@@ -3,7 +3,7 @@ import JSEncrypt from "./vendor/jsencrypt"
 import type { KnownState, LockState, TireState, VehicleCheck, VehicleSnapshot } from "./domain"
 import { BMW_HEADERS, BMW_HOST, brandUserAgent, COMPAT_HEADERS_X } from "./compat-config"
 import { requestCompatNonce } from "./nonce-provider"
-import { makeSession, type BMWSessionSecrets } from "./session-vault"
+import { makeSession, loadSession, saveSession, type BMWSessionSecrets } from "./session-vault"
 import { applyEnergyOverride } from "./storage"
 
 interface CaptchaChallenge {
@@ -195,9 +195,10 @@ function findCaptchaPositionBySampling(image: UIImage): string {
 }
 
 async function createAndVerifyCaptcha(mobile: string): Promise<CaptchaChallenge> {
-  // 滑动验证随机 x 兜底：先试固定值，失败则随机换 correlation/x 重试
+  // 滑动验证随机 x 兜底：首个为固定兼容值，后续为随机候选（每轮轮换起点，避免反复打同一个）
   const candidates: Array<Record<string, string>> = [COMPAT_HEADERS_X]
   for (let i = 0; i < 15; i++) candidates.push(randomHeadersX())
+  let cursor = 0
 
   // 旧版 Scripting（无像素 API）可能因验证码识别降级导致 422：
   // 每轮重新创建验证码（换一张新图）并识别位置，持续重试直到成功；30 秒超时后报错
@@ -206,7 +207,10 @@ async function createAndVerifyCaptcha(mobile: string): Promise<CaptchaChallenge>
   while (Date.now() < deadline) {
     let data: { verifyId: string; backGroundImg: string } | undefined
     let headersX = COMPAT_HEADERS_X
-    for (const candidate of candidates) {
+    // 每轮最多尝试 3 个候选（从轮换起点开始），减少无效请求
+    for (let tried = 0; tried < 3 && !data; tried++) {
+      const candidate = candidates[cursor % candidates.length]
+      cursor += 1
       try {
         const created = await requestJSON<unknown>("/eadrax-coas/v2/cop/create-captcha", {
           method: "POST",
@@ -219,15 +223,11 @@ async function createAndVerifyCaptcha(mobile: string): Promise<CaptchaChallenge>
         }
         data = { verifyId: result.verifyId, backGroundImg: result.backGroundImg }
         headersX = candidate
-        break
       } catch (error) {
         lastError = error
       }
     }
     if (!data) throw lastError ?? new Error("CAPTCHA_CREATE_REJECTED")
-
-    currentHeadersX = headersX
-    persistHeadersX()
 
     let position: string
     try {
@@ -243,8 +243,11 @@ async function createAndVerifyCaptcha(mobile: string): Promise<CaptchaChallenge>
         body: JSON.stringify({ position, verifyId: data.verifyId, mobile }),
       })
       const result = verified as { code?: unknown }
-      if (result.code === 200) return { verifyId: data.verifyId, mobile }
-      throw new Error("CAPTCHA_VERIFY_REJECTED")
+      if (result.code !== 200) throw new Error("CAPTCHA_VERIFY_REJECTED")
+      // 验证成功才持久化该风控头，避免未验证的随机 x 被后续 token 刷新复用
+      currentHeadersX = headersX
+      persistHeadersX()
+      return { verifyId: data.verifyId, mobile }
     } catch (error) {
       lastError = error
     }
@@ -257,6 +260,7 @@ async function createAndVerifyCaptcha(mobile: string): Promise<CaptchaChallenge>
 }
 
 // 滑动验证随机 x：x = 前缀 + md5(uuid) + md5(uuid)，截取 64 位
+// 注意：此 key 刻意不接脚本命名空间 —— 风控头在设备上全局唯一更稳（多脚本共用同一验证头）
 const HEADERS_X_KEY = "bmw.companion.v2.headersX"
 
 function uuidv4(): string {
@@ -311,7 +315,7 @@ async function renewGrant(grant: BMWLoginGrant): Promise<BMWSessionSecrets> {
       ...currentHeadersX,
       "x-login-nonce": nonce,
     },
-    body: `grant_type=refresh_token&refresh_token=${grant.refreshToken}`,
+    body: `grant_type=refresh_token&refresh_token=${encodeURIComponent(grant.refreshToken)}`,
   })
   if (typeof value.access_token !== "string" || typeof value.refresh_token !== "string") {
     throw new Error("REFRESH_TOKEN_CONTRACT_INVALID")
@@ -549,6 +553,14 @@ async function fetchVehicleProfile(
   }
 }
 
+// 充电状态细化：按连接状态 + 接口 chargingStatus 判断（未连接/充电中/已充满）
+function chargingState(electric: Record<string, any>): "charging" | "complete" | "disconnected" | "unknown" {
+  const status = String(electric.chargingStatus ?? "").toUpperCase()
+  if (status === "FINISHED" || status === "CHARGING_FULLY_CHARGED" || status === "FULLY_CHARGED") return "complete"
+  if (electric.isChargerConnected === true || status === "CHARGING") return "charging"
+  return "disconnected"
+}
+
 function normalizeVehicle(
   vehicle: RawVehicle,
   state: Record<string, any>,
@@ -621,14 +633,7 @@ function normalizeVehicle(
       }
     : undefined
 
-  // 充电状态细化：按连接状态 + 接口 chargingStatus 判断（未连接/充电中/已充满）
-function chargingState(electric: Record<string, any>): "charging" | "complete" | "disconnected" | "unknown" {
-  const status = String(electric.chargingStatus ?? "").toUpperCase()
-  if (status === "FINISHED" || status === "CHARGING_FULLY_CHARGED" || status === "FULLY_CHARGED") return "complete"
-  if (electric.isChargerConnected === true || status === "CHARGING") return "charging"
-  return "disconnected"
-}
-
+  // 充电状态：见顶部 chargingState（连接状态 + chargingStatus）
   return {
     schemaVersion: 1,
     localVehicleId: `bmw-${Crypto.sha256(dataFromString(vin)).toHexString().slice(0, 12)}`,
@@ -845,7 +850,7 @@ async function fetchVehicleEntries(
       vehicleMappingType?: unknown
     }>
   }>(
-    "/eadrax-vcs/v5/vehicle-list?",
+    "/eadrax-vcs/v5/vehicle-list",
     {
       method: "POST",
       headers: {
@@ -875,23 +880,37 @@ async function fetchVehicleEntries(
   return entries
 }
 
+// 同时拉取两品牌车辆条目（带 15 秒短缓存：登录后「拉快照 + 拉列表」连发时避免重复请求）
+let entriesCache: { at: number; data: Array<{ vin: string; brand: "BMW" | "MINI"; vehicle: RawVehicle; connected: boolean }> } | null = null
+const ENTRIES_CACHE_MS = 15_000
+
+async function fetchAllVehicleEntries(
+  session: BMWSessionSecrets,
+): Promise<Array<{ vin: string; brand: "BMW" | "MINI"; vehicle: RawVehicle; connected: boolean }>> {
+  if (entriesCache && Date.now() - entriesCache.at < ENTRIES_CACHE_MS) return entriesCache.data
+  const [bmw, mini] = await Promise.all([
+    fetchVehicleEntries(session, "BMW"),
+    fetchVehicleEntries(session, "MINI"),
+  ])
+  const data = [...bmw, ...mini]
+  entriesCache = { at: Date.now(), data }
+  return data
+}
+
 export async function fetchVehicleList(session: BMWSessionSecrets): Promise<VehicleListItem[]> {
   const items: VehicleListItem[] = []
   const seen = new Set<string>()
-  for (const brand of ["BMW", "MINI"] as const) {
-    const entries = await fetchVehicleEntries(session, brand)
-    for (const entry of entries) {
-      const upper = entry.vin.toUpperCase()
-      if (seen.has(upper)) continue
-      seen.add(upper)
-      items.push({
-        vin: entry.vin,
-        brand: entry.brand,
-        model: typeof entry.vehicle.model === "string" ? entry.vehicle.model : "",
-        licensePlate: typeof entry.vehicle.licensePlate === "string" ? entry.vehicle.licensePlate : undefined,
-        connected: entry.connected,
-      })
-    }
+  for (const entry of await fetchAllVehicleEntries(session)) {
+    const upper = entry.vin.toUpperCase()
+    if (seen.has(upper)) continue
+    seen.add(upper)
+    items.push({
+      vin: entry.vin,
+      brand: entry.brand,
+      model: typeof entry.vehicle.model === "string" ? entry.vehicle.model : "",
+      licensePlate: typeof entry.vehicle.licensePlate === "string" ? entry.vehicle.licensePlate : undefined,
+      connected: entry.connected,
+    })
   }
   return items
 }
@@ -900,10 +919,7 @@ export async function fetchFirstVehicleSnapshot(
   session: BMWSessionSecrets,
   targetVin?: string,
 ): Promise<VehicleSnapshot> {
-  const allEntries: Array<{ vin: string; brand: "BMW" | "MINI"; vehicle: RawVehicle }> = []
-  for (const brand of ["BMW", "MINI"] as const) {
-    allEntries.push(...(await fetchVehicleEntries(session, brand)))
-  }
+  const allEntries = await fetchAllVehicleEntries(session)
   let selected = allEntries[0]
   if (targetVin && allEntries.length > 0) {
     const matched = allEntries.find(candidate => candidate.vin.toUpperCase() === targetVin.toUpperCase())
@@ -911,20 +927,24 @@ export async function fetchFirstVehicleSnapshot(
   }
   if (!selected) throw new Error("VEHICLE_LIST_EMPTY")
   const { vin, brand, vehicle } = selected
-  const stateResponse = await requestJSON<{ state?: Record<string, any> }>("/eadrax-vcs/v4/vehicles/state", {
-    method: "GET",
-    headers: {
-      authorization: `Bearer ${session.accessToken}`,
-      "bmw-vin": vin,
-      "x-user-agent": brandUserAgent(brand),
-    },
-  })
+  // state / profile / maintenance 互相独立，并行拉取（非关键接口失败不影响主流程）
+  const [stateResponse, profile, maintenance] = await Promise.all([
+    requestJSON<{ state?: Record<string, any> }>("/eadrax-vcs/v4/vehicles/state", {
+      method: "GET",
+      headers: {
+        authorization: `Bearer ${session.accessToken}`,
+        "bmw-vin": vin,
+        "x-user-agent": brandUserAgent(brand),
+      },
+    }),
+    // 识别逻辑①：profile 的 driveTrain 直接字段（取不到时返回 unknown，交给用户手动覆盖兑底）
+    fetchVehicleProfile(session, vin, brand),
+    fetchMaintenance(session, vin, brand),
+  ])
   if (!stateResponse.state || typeof stateResponse.state !== "object") throw new Error("VEHICLE_STATE_INVALID")
-  // 识别逻辑①：profile 的 driveTrain 直接字段（取不到时返回 unknown，交给用户手动覆盖兜底）
-  const profile = await fetchVehicleProfile(session, vin, brand)
-  const profileType = driveTypeFromProfile(profile)
-  const mildHybrid = isMildHybridProfile(profile)
-  const snapshot = applyEnergyOverride(normalizeVehicle(vehicle, stateResponse.state, profileType, mildHybrid))
+  const snapshot = applyEnergyOverride(
+    normalizeVehicle(vehicle, stateResponse.state, driveTypeFromProfile(profile), isMildHybridProfile(profile)),
+  )
   const consumption = await fetchConsumption(session, vin, snapshot.energy.type, brand)
   if (consumption) {
     snapshot.energy.consumption = consumption.value
@@ -933,10 +953,56 @@ export async function fetchFirstVehicleSnapshot(
     if (consumption.monthly != null) snapshot.energy.consumptionMonthly = consumption.monthly
   }
   // 保养提醒：即将到期/已到期的 CBS 保养项加入「需要关注」
-  const maintenance = await fetchMaintenance(session, vin, brand)
   const maintenanceChecks = buildMaintenanceChecks(maintenance)
   if (maintenanceChecks.length > 0) {
     snapshot.checks = [...snapshot.checks, ...maintenanceChecks]
   }
   return snapshot
+}
+
+// 官方车辆实拍图缓存路径（App Group，按 VIN 命名；组件与车况页共用，避免每次渲染重新下载）
+export function carImageCachePath(vin: string): string {
+  return `${FileManager.appGroupDocumentsDirectory}/car-image-${vin.toUpperCase()}.png`
+}
+
+// 同步读缓存的车辆实拍图（无网络请求，组件/车况页渲染时优先用）
+export function loadCachedCarImage(snapshot: VehicleSnapshot): UIImage | null {
+  try {
+    if (!snapshot.vin) return null
+    return UIImage.fromFile(carImageCachePath(snapshot.vin))
+  } catch {
+    return null
+  }
+}
+
+// 官方车辆图片：需要 VIN + 有效 token（Keychain）。拉取成功后写入本地缓存。
+// 用于车况页顶部卡片与桌面组件展示车辆实拍图。
+export async function fetchOfficialCarImage(snapshot: VehicleSnapshot): Promise<UIImage | null> {
+  try {
+    const session = loadSession()
+    if (!session || !snapshot.vin) return null
+    let usable = session
+    if (Date.parse(session.accessTokenExpiresAt) <= Date.now() + 60_000) {
+      usable = await renewSession(session)
+      saveSession(usable)
+    }
+    const url =
+      `${BMW_HOST}/eadrax-ics/v3/presentation/vehicles/${encodeURIComponent(snapshot.vin)}/images?carView=VehicleStatus`
+    const brand = snapshot.identity.brand?.toLowerCase() === "mini" ? "MINI" : "BMW"
+    const response = await fetch(url, {
+      method: "GET",
+      headers: { ...BMW_HEADERS, "x-user-agent": brandUserAgent(brand), authorization: `Bearer ${usable.accessToken}` },
+      timeout: 12,
+      handleRedirect: async request => (request.url.startsWith(BMW_HOST) ? request : null),
+      debugLabel: "official car image",
+    })
+    if (!response.ok) return null
+    const data = await response.data()
+    if (!data || data.size === 0) return null
+    try { FileManager.writeAsDataSync(carImageCachePath(snapshot.vin), data) } catch {}
+    return UIImage.fromData(data)
+  } catch (error) {
+    console.warn("official car image unavailable:", error instanceof Error ? error.message : String(error))
+    return null
+  }
 }

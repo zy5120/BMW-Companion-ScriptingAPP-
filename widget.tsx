@@ -1,8 +1,6 @@
 import {
-  fetch,
   HStack,
   Image,
-  Link,
   Script,
   Spacer,
   Text,
@@ -11,21 +9,16 @@ import {
   ZStack,
 } from "scripting"
 import type { VehicleSnapshot } from "./domain"
-import { fetchFirstVehicleSnapshot, renewSession } from "./bmw-client"
-import { BMW_HEADERS, BMW_HOST, brandUserAgent } from "./compat-config"
-import { formatSyncTime, lockInfo } from "./formatters"
-import { refreshMapSnapshot } from "./map-snapshot"
-import { loadSession, saveSession } from "./session-vault"
+import { fetchOfficialCarImage, loadCachedCarImage } from "./bmw-client"
+import { doorWindowStatus, formatSyncTime, lockInfo } from "./formatters"
+import { refreshConnectedSnapshot } from "./refresh"
 import {
-  getFreshness,
   loadRuntimeMode,
   loadSettings,
   loadWidgetSnapshot,
   parseWidgetParameter,
   resolvePrivacy,
-  saveConnectedSnapshot,
   scriptKeyNamespace,
-  setRuntimeMode,
 } from "./storage"
 
 const ACCENT = "#166DFF"
@@ -66,51 +59,6 @@ function deepLink(route: "overview" | "status" | "location"): string {
 }
 
 // ---------- 通用展示小工具 ----------
-
-// 只考虑车门/车窗状态（与车况页锁车卡片副标题逻辑一致），不判断锁车
-function doorWindowStatus(snapshot: VehicleSnapshot): { safe: boolean; text: string } {
-  const a = snapshot.access
-  const doors = a.doorStates
-  const windows = a.windowStates
-  // 先判断两门/四门：车门后排（左后/右后）都 unknown → 两门车；只有两门车才忽略后排
-  const twoDoorDoors = Boolean(doors && doors.leftRear === "unknown" && doors.rightRear === "unknown")
-  const twoDoorWindows = Boolean(windows && windows.leftRear === "unknown" && windows.rightRear === "unknown")
-  const doorOpen: string[] = []
-  const windowOpen: string[] = []
-  if (doors) {
-    if (doors.leftFront === "open") doorOpen.push("左前车门")
-    if (doors.rightFront === "open") doorOpen.push("右前车门")
-    if (!twoDoorDoors) {
-      if (doors.leftRear === "open") doorOpen.push("左后车门")
-      if (doors.rightRear === "open") doorOpen.push("右后车门")
-    }
-  }
-  if (windows) {
-    if (windows.leftFront === "open") windowOpen.push("左前车窗")
-    if (windows.rightFront === "open") windowOpen.push("右前车窗")
-    if (!twoDoorWindows) {
-      if (windows.leftRear === "open") windowOpen.push("左后车窗")
-      if (windows.rightRear === "open") windowOpen.push("右后车窗")
-    }
-  }
-  const messages: string[] = []
-  if (doorOpen.length === 1) messages.push(`${doorOpen[0]}未关闭`)
-  else if (doorOpen.length > 1) messages.push("多个车门未关闭")
-  if (windowOpen.length === 1) messages.push(`${windowOpen[0]}未关闭`)
-  else if (windowOpen.length > 1) messages.push("多个车窗未关闭")
-  if (messages.length > 0) return { safe: false, text: messages.join(" · ") }
-  // 无细化状态时回退合并状态
-  if (!doors && !windows) {
-    if (a.doors === "open" || a.windows === "open") return { safe: false, text: "有门窗未关闭" }
-    if (a.doors === "unknown" && a.windows === "unknown") return { safe: false, text: "门窗状态未知" }
-  }
-  // 部分未知：两门车只看前排，四门车前排/后排都算
-  const hasUnknown =
-    (doors ? (doors.leftFront === "unknown" || doors.rightFront === "unknown" || (!twoDoorDoors && (doors.leftRear === "unknown" || doors.rightRear === "unknown"))) : false) ||
-    (windows ? (windows.leftFront === "unknown" || windows.rightFront === "unknown" || (!twoDoorWindows && (windows.leftRear === "unknown" || windows.rightRear === "unknown"))) : false)
-  if (hasUnknown) return { safe: false, text: "部分门窗状态未知" }
-  return { safe: true, text: "门窗均已关闭" }
-}
 
 function fuelLevelText(snapshot: VehicleSnapshot): string {
   const e = snapshot.energy
@@ -153,37 +101,6 @@ function energyIcon(snapshot: VehicleSnapshot): string {
   return snapshot.energy.type === "electric" ? "bolt.fill" : "fuelpump.fill"
 }
 
-// 官方车辆图片：需要 VIN + 有效 token（Keychain，同一脚本作用域）。
-// 官方车辆图片：eadrax-ics/v3/presentation/vehicles/{vin}/images?carView=VehicleStatus
-async function fetchOfficialCarImage(snapshot: VehicleSnapshot): Promise<UIImage | null> {
-  try {
-    const session = loadSession()
-    if (!session || !snapshot.vin) return null
-    let usable = session
-    if (Date.parse(session.accessTokenExpiresAt) <= Date.now() + 60_000) {
-      usable = await renewSession(session)
-      saveSession(usable)
-    }
-    const url =
-      `${BMW_HOST}/eadrax-ics/v3/presentation/vehicles/${encodeURIComponent(snapshot.vin)}/images?carView=VehicleStatus`
-    const brand = snapshot.identity.brand?.toLowerCase() === "mini" ? "MINI" : "BMW"
-    const response = await fetch(url, {
-      method: "GET",
-      headers: { ...BMW_HEADERS, "x-user-agent": brandUserAgent(brand), authorization: `Bearer ${usable.accessToken}` },
-      timeout: 12,
-      handleRedirect: async request => (request.url.startsWith(BMW_HOST) ? request : null),
-      debugLabel: "official car image",
-    })
-    if (!response.ok) return null
-    const data = await response.data()
-    if (!data || data.size === 0) return null
-    return UIImage.fromData(data)
-  } catch (error) {
-    console.warn("official car image unavailable:", error instanceof Error ? error.message : String(error))
-    return null
-  }
-}
-
 function tirePairColor(status?: string): any {
   if (status === "warning") return "#FF9F0A"
   if (status === "unknown") return "#8E8E93"
@@ -217,28 +134,6 @@ function CarView({ car, maxHeight = 108 }: { car: UIImage | null; maxHeight?: nu
         <Image systemName="car.side.fill" font={46} foregroundStyle={ACCENT} />
       )}
     </ZStack>
-  )
-}
-
-function LockRow({ snapshot, showUpdate = true }: { snapshot: VehicleSnapshot; showUpdate?: boolean }) {
-  const info = lockInfo(snapshot)
-  const color = info.driving ? "#0A84FF" : info.unknown ? "#8E8E93" : info.locked ? "#30D158" : "#FF453A"
-  const icon = info.driving ? "car.fill" : info.locked ? "lock.shield.fill" : "xmark.shield.fill"
-  return (
-    <HStack
-      spacing={5}
-      padding={{ horizontal: 6, vertical: 4 }}
-      background={darkColor(SUB_BG)}
-      clipShape={{ type: "rect", cornerRadius: 7 }}
-    >
-      <Image systemName={icon} font={10} foregroundStyle={color as any} />
-      <Text font={10} fontWeight="semibold" foregroundStyle={color as any}>{info.text}</Text>
-      {showUpdate ? <Text font={9} foregroundStyle={darkColor("secondaryLabel")}>{formatSyncTime(snapshot.vehicleObservedAt)}</Text> : null}
-      <Spacer minLength={0} />
-      {snapshot.checks.length > 0 ? (
-        <Image systemName="exclamationmark.triangle.fill" font={10} foregroundStyle="#FF9F0A" />
-      ) : null}
-    </HStack>
   )
 }
 
@@ -556,25 +451,6 @@ function LargeWidget({ snapshot, logo, car, mapImage, privacy }: {
   )
 }
 
-function freshnessLabel(value: string): string {
-  switch (value) {
-    case "fresh": return "数据最新"
-    case "stale": return "显示上次数据"
-    case "expired": return "数据已过期"
-    case "invalid": return "数据不可用"
-    default: return "尚无数据"
-  }
-}
-
-function freshnessColor(value: string): string {
-  switch (value) {
-    case "fresh": return "#30D158"
-    case "stale": return "#FF9F0A"
-    case "expired": return "#FF453A"
-    default: return "#8E8E93"
-  }
-}
-
 // 读取 App 在「停车位置」页/刷新时生成的 Apple 原生地图快照（App Group 共享目录，组件可读）
 async function loadMapImage(): Promise<UIImage | null> {
   try {
@@ -599,7 +475,7 @@ async function loadLogo(brand: "BMW" | "MINI" = "BMW"): Promise<UIImage | null> 
   }
 }
 
-// 组件自动刷新：保存的快照超过 30 分钟 → 向 BMW 拉取最新车况（会话在 Keychain、nonce 同意在共享域，组件可访问）；
+// 组件自动刷新：保存的快照超过设定间隔 → 向 BMW 拉取最新车况；
 // 任何失败（离线/会话失效/接口错误）都回退到已有快照，保证组件永远有内容可显示。
 async function refreshWidgetSnapshotIfStale(snapshot: VehicleSnapshot): Promise<VehicleSnapshot> {
   if (snapshot.source === "network") {
@@ -609,67 +485,84 @@ async function refreshWidgetSnapshotIfStale(snapshot: VehicleSnapshot): Promise<
     if (Number.isFinite(age) && age < intervalMinutes * 60 * 1000) return snapshot
   }
   try {
-    const session = loadSession()
-    if (!session) return snapshot
-    let usable = session
-    if (Date.parse(session.accessTokenExpiresAt) <= Date.now() + 60_000) {
-      usable = await renewSession(session)
-      saveSession(usable)
-    }
-    const next = await fetchFirstVehicleSnapshot(usable, loadSettings().selectedVin || undefined)
-    saveConnectedSnapshot(next)
-    setRuntimeMode("connected")
-    if (next.location) {
-      void refreshMapSnapshot(next.location.latitude, next.location.longitude, next.identity.displayName)
-    }
-    return next
+    return await refreshConnectedSnapshot()
   } catch {
     return snapshot
   }
 }
 
 async function main() {
-  let snapshot = loadWidgetSnapshot()
-  setForceDark(loadSettings().alwaysDarkBackground === true)
-  // MINI 车标深色模式渲染白色（模板模式按形状染色）
-  MINI_DARK_LOGO = snapshot.identity.brand?.toLowerCase() === "mini" &&
-    (FORCE_DARK || Device.colorScheme === "dark")
-  // 组件每 30 分钟刷新一次：快照过旧时自动拉新数据（失败则沿用旧数据）
-  if (loadRuntimeMode() === "connected") {
-    snapshot = await refreshWidgetSnapshotIfStale(snapshot)
-  }
-  const parameter = parseWidgetParameter(Widget.parameter)
-  const privacy = resolvePrivacy(parameter, loadSettings())
-  const family = Widget.family
-  const logo = await loadLogo(snapshot.identity.brand?.toLowerCase() === "mini" ? "MINI" : "BMW")
-  // 小/中/大号都需要车辆图；大号顶部与中号一致，底部为地图快照
-  const needsCar = family === "systemSmall" || family === "systemMedium" || family === "systemLarge" || family === "systemExtraLarge"
-  const car = needsCar ? await fetchOfficialCarImage(snapshot) : null
-  const mapImage = await loadMapImage()
+  try {
+    let snapshot = loadWidgetSnapshot()
+    setForceDark(loadSettings().alwaysDarkBackground === true)
+    // MINI 车标深色模式渲染白色（模板模式按形状染色）
+    MINI_DARK_LOGO = snapshot.identity.brand?.toLowerCase() === "mini" &&
+      (FORCE_DARK || Device.colorScheme === "dark")
+    // 组件按设定间隔刷新一次：快照过旧时自动拉新数据（失败则沿用旧数据）
+    if (loadRuntimeMode() === "connected") {
+      snapshot = await refreshWidgetSnapshotIfStale(snapshot)
+    }
+    const parameter = parseWidgetParameter(Widget.parameter)
+    const privacy = resolvePrivacy(parameter, loadSettings())
+    const family = Widget.family
+    const logo = await loadLogo(snapshot.identity.brand?.toLowerCase() === "mini" ? "MINI" : "BMW")
+    // 小/中/大号都需要车辆图；优先用本地缓存（App Group 已缓存则立即显示），首次无缓存时再请求
+    const needsCar = family === "systemSmall" || family === "systemMedium" || family === "systemLarge" || family === "systemExtraLarge"
+    let car = needsCar ? loadCachedCarImage(snapshot) : null
+    if (needsCar && !car) {
+      car = await Promise.race([
+        fetchOfficialCarImage(snapshot),
+        new Promise<null>(resolve => setTimeout(() => resolve(null), 6000)),
+      ])
+    }
+    const mapImage = await loadMapImage()
 
-  let content
-  switch (family) {
-    case "accessoryRectangular":
-      content = <AccessoryRectangular snapshot={snapshot} logo={logo} />
-      break
-    case "systemSmall":
-      content = <SmallWidget snapshot={snapshot} car={car} />
-      break
-    case "systemMedium":
-      content = <MediumWidget snapshot={snapshot} logo={logo} car={car} privacy={privacy} />
-      break
-    case "systemLarge":
-    case "systemExtraLarge":
-      content = <LargeWidget snapshot={snapshot} logo={logo} car={car} mapImage={mapImage} privacy={privacy} />
-      break
-    default:
-      content = <SmallWidget snapshot={snapshot} car={car} />
-  }
+    let content
+    switch (family) {
+      case "accessoryRectangular":
+        content = <AccessoryRectangular snapshot={snapshot} logo={logo} />
+        break
+      case "systemSmall":
+        content = <SmallWidget snapshot={snapshot} car={car} />
+        break
+      case "systemMedium":
+        content = <MediumWidget snapshot={snapshot} logo={logo} car={car} privacy={privacy} />
+        break
+      case "systemLarge":
+      case "systemExtraLarge":
+        content = <LargeWidget snapshot={snapshot} logo={logo} car={car} mapImage={mapImage} privacy={privacy} />
+        break
+      default:
+        content = <SmallWidget snapshot={snapshot} car={car} />
+    }
 
-  Widget.present(content, {
-    reloadPolicy: { policy: "after", date: new Date(Date.now() + 30 * 60 * 1000) },
-  })
-  Script.exit()
+    // 系统级重排间隔跟随设置（默认 30 分钟），与「设置 → 刷新间隔」保持一致
+    const intervalMinutes = loadSettings().refreshIntervalMinutes ?? 30
+    Widget.present(content, {
+      reloadPolicy: { policy: "after", date: new Date(Date.now() + intervalMinutes * 60 * 1000) },
+    })
+  } catch (error) {
+    // 组件渲染失败兑底：展示最小占位，避免组件直接空白/无法添加
+    console.warn("widget render failed:", error instanceof Error ? error.message : String(error))
+    try {
+      Widget.present(
+        <VStack
+          alignment="center"
+          spacing={6}
+          padding={12}
+          frame={{ maxWidth: Infinity, maxHeight: Infinity, alignment: "center" }}
+          widgetBackground={CARD_BG}
+          foregroundStyle="secondaryLabel"
+        >
+          <Image systemName="car.side.fill" font={30} foregroundStyle={ACCENT} />
+          <Text font={10}>BMW MINI Linker</Text>
+        </VStack>,
+        { reloadPolicy: { policy: "after", date: new Date(Date.now() + 15 * 60 * 1000) } },
+      )
+    } catch {}
+  } finally {
+    Script.exit()
+  }
 }
 
 void main()

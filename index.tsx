@@ -3,7 +3,6 @@
 // 仅限个人学习使用，请勿用于商业用途。
 import {
   Button,
-  fetch,
   Gauge,
   HStack,
   Image,
@@ -33,14 +32,15 @@ import {
   useState,
 } from "scripting"
 import { ConnectionPage } from "./connection-page"
-import { fetchFirstVehicleSnapshot, renewSession } from "./bmw-client"
-import { BMW_HEADERS, BMW_HOST, brandUserAgent } from "./compat-config"
+import { fetchOfficialCarImage, loadCachedCarImage } from "./bmw-client"
 import { refreshMapSnapshot } from "./map-snapshot"
-import { loadSession, saveSession } from "./session-vault"
+import { refreshConnectedSnapshot } from "./refresh"
+import { loadSession } from "./session-vault"
 import type { KnownState, TireState, VehicleSnapshot } from "./domain"
 import { CHANGELOG, CURRENT_VERSION, versionNewer, type VersionNote } from "./changelog"
 import {
   displayAddress,
+  doorWindowStatus,
   formatRelativeTime,
   formatSyncTime,
   freshnessColor,
@@ -51,13 +51,10 @@ import {
 } from "./formatters"
 import {
   getFreshness,
-  loadRuntimeMode,
   loadSettings,
   loadSnapshot,
   refreshDemoSnapshot,
-  saveConnectedSnapshot,
   saveSettings,
-  setRuntimeMode,
 } from "./storage"
 
 const PROJECT_NAME = "BMW MINI Linker"
@@ -215,81 +212,6 @@ function TireCard({ tirePosition, tire }: { tirePosition: string; tire?: TireSta
   )
 }
 
-// 官方车辆图片：需要 VIN + 有效 token（Keychain）。用于车况页顶部卡片右侧展示车辆实拍图。
-async function fetchOfficialCarImage(snapshot: VehicleSnapshot): Promise<UIImage | null> {
-  try {
-    const session = loadSession()
-    if (!session || !snapshot.vin) return null
-    let usable = session
-    if (Date.parse(session.accessTokenExpiresAt) <= Date.now() + 60_000) {
-      usable = await renewSession(session)
-      saveSession(usable)
-    }
-    const url =
-      `${BMW_HOST}/eadrax-ics/v3/presentation/vehicles/${encodeURIComponent(snapshot.vin)}/images?carView=VehicleStatus`
-    const brand = snapshot.identity.brand?.toLowerCase() === "mini" ? "MINI" : "BMW"
-    const response = await fetch(url, {
-      method: "GET",
-      headers: { ...BMW_HEADERS, "x-user-agent": brandUserAgent(brand), authorization: `Bearer ${usable.accessToken}` },
-      timeout: 12,
-      handleRedirect: async request => (request.url.startsWith(BMW_HOST) ? request : null),
-      debugLabel: "official car image",
-    })
-    if (!response.ok) return null
-    const data = await response.data()
-    if (!data || data.size === 0) return null
-    return UIImage.fromData(data)
-  } catch (error) {
-    console.warn("official car image unavailable:", error instanceof Error ? error.message : String(error))
-    return null
-  }
-}
-
-// 车门/车窗关键提醒（车辆安全卡小字，避免与锁车大字重复）
-// 全关→「门窗均已关闭」；多个未关→「多个车门/车窗未关闭」；单个未关→写出具体位置
-function doorWindowSummary(snapshot: VehicleSnapshot): string {
-  const doors = snapshot.access.doorStates
-  const windows = snapshot.access.windowStates
-  // 先判断两门/四门：车门后排（左后/右后）都 unknown → 两门车；只有两门车才忽略后排
-  const twoDoorDoors = Boolean(doors && doors.leftRear === "unknown" && doors.rightRear === "unknown")
-  const twoDoorWindows = Boolean(windows && windows.leftRear === "unknown" && windows.rightRear === "unknown")
-  const doorOpen: string[] = []
-  const windowOpen: string[] = []
-  if (doors) {
-    if (doors.leftFront === "open") doorOpen.push("左前车门")
-    if (doors.rightFront === "open") doorOpen.push("右前车门")
-    if (!twoDoorDoors) {
-      if (doors.leftRear === "open") doorOpen.push("左后车门")
-      if (doors.rightRear === "open") doorOpen.push("右后车门")
-    }
-  }
-  if (windows) {
-    if (windows.leftFront === "open") windowOpen.push("左前车窗")
-    if (windows.rightFront === "open") windowOpen.push("右前车窗")
-    if (!twoDoorWindows) {
-      if (windows.leftRear === "open") windowOpen.push("左后车窗")
-      if (windows.rightRear === "open") windowOpen.push("右后车窗")
-    }
-  }
-  const messages: string[] = []
-  if (doorOpen.length === 1) messages.push(`${doorOpen[0]}未关闭`)
-  else if (doorOpen.length > 1) messages.push("多个车门未关闭")
-  if (windowOpen.length === 1) messages.push(`${windowOpen[0]}未关闭`)
-  else if (windowOpen.length > 1) messages.push("多个车窗未关闭")
-  if (messages.length > 0) return messages.join(" · ")
-  // 没有细化状态时回退合并状态
-  if (!doors && !windows) {
-    if (snapshot.access.doors === "open" || snapshot.access.windows === "open") return "有门窗未关闭"
-    if (snapshot.access.doors === "unknown" && snapshot.access.windows === "unknown") return "门窗状态未知"
-  }
-  // 部分未知：两门车只看前排，四门车前排/后排都算
-  const hasUnknown =
-    (doors ? (doors.leftFront === "unknown" || doors.rightFront === "unknown" || (!twoDoorDoors && (doors.leftRear === "unknown" || doors.rightRear === "unknown"))) : false) ||
-    (windows ? (windows.leftFront === "unknown" || windows.rightFront === "unknown" || (!twoDoorWindows && (windows.leftRear === "unknown" || windows.rightRear === "unknown"))) : false)
-  if (hasUnknown) return "部分门窗状态未知"
-  return "门窗均已关闭"
-}
-
 // 能源量标签：燃油/轻混→油量；纯电→电量；混动→油量及电量
 function fuelElectricityLabel(snapshot: VehicleSnapshot): string {
   if (snapshot.energy.type === "electric") return "电量"
@@ -326,13 +248,19 @@ function EnergyHero({ snapshot }: { snapshot: VehicleSnapshot }) {
   const consumptionText = consumptionMode === "monthly"
     ? (snapshot.energy.consumptionMonthly ?? snapshot.energy.consumptionLastTrip)
     : (snapshot.energy.consumptionLastTrip ?? snapshot.energy.consumptionMonthly)
-  const [carImage, setCarImage] = useState<UIImage | null>(null)
+  // 车图优先用本地缓存（App Group 按 VIN 缓存），无缓存时再请求官方图
+  const [carImage, setCarImage] = useState<UIImage | null>(() => loadCachedCarImage(snapshot))
   useEffect(() => {
     let cancelled = false
-    setCarImage(null)
-    fetchOfficialCarImage(snapshot)
-      .then(img => { if (!cancelled && img) setCarImage(img) })
-      .catch(() => {})
+    const cached = loadCachedCarImage(snapshot)
+    if (cached) {
+      setCarImage(cached)
+    } else {
+      setCarImage(null)
+      fetchOfficialCarImage(snapshot)
+        .then(img => { if (!cancelled && img) setCarImage(img) })
+        .catch(() => {})
+    }
     return () => { cancelled = true }
   }, [snapshot.vin])
   return (
@@ -467,18 +395,8 @@ function StatusDetailsPage({ showClose = false }: { showClose?: boolean }) {
     if (refreshing) return
     setRefreshing(true)
     try {
-      const session = loadSession()
-      if (!session) { setSnapshot(() => loadSnapshot()); return }
-      let usable = session
-      if (Date.parse(session.accessTokenExpiresAt) <= Date.now() + 60_000) {
-        usable = await renewSession(session)
-        saveSession(usable)
-      }
-      const next = await fetchFirstVehicleSnapshot(usable, loadSettings().selectedVin || undefined)
-      saveConnectedSnapshot(next)
-      setRuntimeMode("connected")
+      const next = await refreshConnectedSnapshot()
       setSnapshot(next)
-      if (next.location) void refreshMapSnapshot(next.location.latitude, next.location.longitude, next.identity.displayName)
     } catch {
       // 失败沿用旧数据
     } finally {
@@ -941,10 +859,10 @@ function SettingsPage() {
   )
 }
 
-function LocationMapCard({ snapshot }: { snapshot: VehicleSnapshot }) {
+function LocationMapCard({ snapshot, location }: { snapshot: VehicleSnapshot; location: NonNullable<VehicleSnapshot["location"]> }) {
   const center = {
-    latitude: snapshot.location!.latitude,
-    longitude: snapshot.location!.longitude,
+    latitude: location.latitude,
+    longitude: location.longitude,
   }
   const camera = useObservable<MapCameraPosition>(
     MapCameraPosition.region({
@@ -960,14 +878,14 @@ function LocationMapCard({ snapshot }: { snapshot: VehicleSnapshot }) {
         span: { latitudeDelta: 0.002, longitudeDelta: 0.002 },
       }),
     )
-  }, [snapshot.location?.latitude, snapshot.location?.longitude])
+  }, [location.latitude, location.longitude])
   const bounds = MapCameraBounds.centerCoordinateBounds(
     { center, span: { latitudeDelta: 0.001, longitudeDelta: 0.001 } },
     { minimumDistance: 200, maximumDistance: 250 },
   )
   // 单击地图 → 在系统地图 App 中打开车辆位置（ll 定位到原坐标，q 只显示车辆名称）
   const openInMaps = () => {
-    const { latitude, longitude } = snapshot.location!
+    const { latitude, longitude } = location
     const name = encodeURIComponent(snapshot.identity.displayName)
     void Safari.openURL(`maps://?ll=${latitude},${longitude}&q=${name}&z=16`)
   }
@@ -1034,21 +952,10 @@ function DashboardPage() {
     }
     setRefreshing(true)
     try {
-      let usable = session
-      if (Date.parse(session.accessTokenExpiresAt) <= Date.now() + 60_000) {
-        usable = await renewSession(session)
-        saveSession(usable)
-      }
-      const next = await fetchFirstVehicleSnapshot(usable, loadSettings().selectedVin || undefined)
-      saveConnectedSnapshot(next)
-      setRuntimeMode("connected")
+      const next = await refreshConnectedSnapshot()
       setSnapshot(next)
       setRefreshResult("success")
       Widget.reloadAll()
-      // 自动生成停车位置地图快照（离屏渲染），供桌面大号组件使用
-      if (next.location) {
-        void refreshMapSnapshot(next.location.latitude, next.location.longitude, next.identity.displayName)
-      }
     } catch {
       setRefreshResult("failure")
     } finally {
@@ -1104,7 +1011,7 @@ function DashboardPage() {
               icon={snapshot.driving ? "car.fill" : snapshot.access.lock === "locked" ? "lock.shield.fill" : "lock.open.fill"}
               title="车辆安全"
               value={lockInfo(snapshot).text}
-              subtitle={doorWindowSummary(snapshot)}
+              subtitle={doorWindowStatus(snapshot).text}
               tint={safety.safe ? "#30D158" : "#FF9F0A"}
             />
           </NavigationLink>
@@ -1154,7 +1061,7 @@ function DashboardPage() {
         </VStack>
 
         {snapshot.location && !loadSettings().privacyMode ? (
-          <LocationMapCard snapshot={snapshot} />
+          <LocationMapCard snapshot={snapshot} location={snapshot.location} />
         ) : null}
 
         <VStack alignment="leading" spacing={10}>
