@@ -1,5 +1,5 @@
 // 版本号与更新日志（用于「更新展示」sheet 与设置页版本号）
-export const CURRENT_VERSION = "0.4.3"
+export const CURRENT_VERSION = "0.4.4"
 
 export interface VersionNote {
   version: string
@@ -10,6 +10,13 @@ export interface VersionNote {
 // 按新→旧排列，最多保留近 5 条（slice 兜底，超出自动截断；发版时也建议删除最旧条目）。
 // 新增版本时在顶部加一条，并把 CURRENT_VERSION 同步更新。
 export const CHANGELOG: VersionNote[] = [
+  {
+    version: "0.4.4",
+    title: "优化代码逻辑",
+    notes: [
+      "优化代码逻辑，提升稳定性与加载速度",
+    ],
+  },
   {
     version: "0.4.3",
     title: "地图车标标签与行驶中状态",

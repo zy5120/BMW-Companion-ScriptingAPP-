@@ -7,3 +7,6 @@ node_modules/
 
 # Scripting scratch (never committed)
 _*.tsx
+
+# 远控私有目录（含远控代码，仅本地使用，绝不提交公开仓库）
+private-remote/

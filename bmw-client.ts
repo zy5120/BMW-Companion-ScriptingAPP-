@@ -49,7 +49,7 @@ function normalizedMobile(value: string): string {
   return mobile
 }
 
-async function requestJSON<T>(
+export async function requestJSON<T>(
   path: string,
   init: { method?: string; headers?: Record<string, string>; body?: string },
 ): Promise<T> {
@@ -263,7 +263,7 @@ async function createAndVerifyCaptcha(mobile: string): Promise<CaptchaChallenge>
 // 注意：此 key 刻意不接脚本命名空间 —— 风控头在设备上全局唯一更稳（多脚本共用同一验证头）
 const HEADERS_X_KEY = "bmw.companion.v2.headersX"
 
-function uuidv4(): string {
+export function uuidv4(): string {
   return "xxxxxxxx-xxxx-4xxx-yxxx-xxxxxxxxxxxx".replace(/[xy]/g, c => {
     const r = (Math.random() * 16) | 0
     const v = c === "x" ? r : (r & 0x3) | 0x8
