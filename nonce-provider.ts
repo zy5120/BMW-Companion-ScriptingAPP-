@@ -1,5 +1,8 @@
 import { fetch } from "scripting"
 import {
+  BACKUP_NONCE_HOST,
+  BACKUP_NONCE_PATH,
+  BACKUP_NONCE_XUA,
   BMW_CLIENT,
   COMPAT_NONCE_HOST,
   COMPAT_NONCE_PATH,
@@ -11,17 +14,19 @@ import type { NonceProviderId } from "./domain"
 export type NoncePurpose = "login" | "refresh"
 
 // —— 可插拔 nonce 提供方 ——
-// 在「连接 BMW」页的登录验证服务中切换：默认服务 / 自定义地址（自建服务或测试）。
+// 在「连接 BMW」页的登录验证服务中切换：主要 / 备用 / 自定义地址（自建服务或测试）。
 // 每个提供方都会把手机号/gcid 发送到对应服务换取 nonce，因此披露/同意按当前提供方区分。
 
 function currentProvider(): NonceProviderId {
-  return loadSettings().nonceProvider ?? "qqtlr"
+  const value = loadSettings().nonceProvider
+  if (value === "backup" || value === "custom") return value
+  return "qqtlr"
 }
 
 function providerHost(provider: NonceProviderId): string {
-  return provider === "custom"
-    ? (loadSettings().customNonceUrl?.trim() || "自定义地址")
-    : COMPAT_NONCE_HOST
+  if (provider === "custom") return loadSettings().customNonceUrl?.trim() || "自定义地址"
+  if (provider === "backup") return BACKUP_NONCE_HOST
+  return COMPAT_NONCE_HOST
 }
 
 export function getNonceDisclosure(): { providerId: string; host: string; message: string } {
@@ -93,6 +98,7 @@ export async function requestCompatNonce(
   }
 
   switch (currentProvider()) {
+    case "backup": return requestBackupNonce(normalized)
     case "custom": return requestCustomNonce(normalized)
     default: return requestQqtlrNonce(normalized)
   }
@@ -114,6 +120,28 @@ async function requestQqtlrNonce(normalized: string): Promise<string> {
     timeout: 12,
     handleRedirect: async request => request.url.startsWith(COMPAT_NONCE_HOST) ? request : null,
     debugLabel: "BMW nonce qqtlr",
+  })
+  return parseNonceResponse(response)
+}
+
+// —— 备用通道 ——
+// GET <path>?phone=<手机号>，请求头带 _xua / _nonce（客户端随机）/ User-Agent。
+async function requestBackupNonce(normalized: string): Promise<string> {
+  const url = `${BACKUP_NONCE_HOST}${BACKUP_NONCE_PATH}?phone=${encodeURIComponent(normalized)}`
+  const response = await fetch(url, {
+    method: "GET",
+    headers: {
+      _xua: BACKUP_NONCE_XUA,
+      _nonce: randomBase64(16),
+      "User-Agent": BMW_CLIENT.dartUserAgent,
+      _av: "2.0.5",
+      _sv: "17.6",
+      _chl: "appstore",
+      Accept: "*/*",
+    },
+    timeout: 12,
+    handleRedirect: async request => request.url.startsWith(BACKUP_NONCE_HOST) ? request : null,
+    debugLabel: "BMW nonce backup",
   })
   return parseNonceResponse(response)
 }
@@ -160,4 +188,13 @@ async function parseNonceResponse(response: {
     throw new Error("NONCE_RESPONSE_INVALID")
   }
   return nonce
+}
+
+// 生成客户端随机串（备用通道的 _nonce 头用）
+function randomBase64(nBytes: number): string {
+  const chars = "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/"
+  const len = Math.ceil((nBytes * 4) / 3)
+  let s = ""
+  for (let i = 0; i < len; i++) s += chars[Math.floor(Math.random() * chars.length)]
+  return s.replace(/=+$/, "") + "=="
 }

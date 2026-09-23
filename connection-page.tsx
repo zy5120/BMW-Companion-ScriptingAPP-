@@ -433,7 +433,7 @@ export function ConnectionPage() {
 
       <Section
         header={<Text font="headline">登录验证服务</Text>}
-        footer={<Text font="caption">用于登录验证的 nonce 服务。</Text>}
+        footer={<Text font="caption">用于登录验证的 nonce 服务。默认通道不可用（如证书失效、请求失败）时，可切换到备用通道。</Text>}
       >
         <Picker
           value={nonceProvider}
@@ -442,8 +442,9 @@ export function ConnectionPage() {
           title="nonce 服务"
           systemImage="arrow.triangle.2.circlepath"
         >
-          <Text tag="qqtlr">默认（推荐）</Text>
-          <Text tag="custom">自定义地址</Text>
+          <Text tag="qqtlr">主要（没带伞服务商）</Text>
+          <Text tag="backup">备用</Text>
+          <Text tag="custom">自定义</Text>
         </Picker>
         {nonceProvider === "custom" ? (
           <TextField title="自定义地址" prompt="如 https://example.com/api/nonce" value={customNonceUrl} onChanged={persistCustomNonceUrl} />
