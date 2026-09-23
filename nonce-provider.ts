@@ -104,46 +104,58 @@ export async function requestCompatNonce(
   }
 }
 
+// —— 取号请求：默认 HTTPS，失败（证书过期 / 连接异常）自动降级为 HTTP 重试 ——
+async function fetchNonceResponse(
+  url: string,
+  headers: Record<string, string>,
+  debugLabel: string,
+): Promise<{ ok: boolean; status: number; text(): Promise<string> }> {
+  const send = async (target: string) => {
+    const origin = (target.match(/^https?:\/\/[^/]+/) ?? [target])[0]
+    return await fetch(target, {
+      method: "GET",
+      headers,
+      timeout: 12,
+      handleRedirect: async request => request.url.startsWith(origin) ? request : null,
+      debugLabel,
+    })
+  }
+  try {
+    return await send(url)
+  } catch (error) {
+    const httpUrl = url.replace(/^https:\/\//, "http://")
+    if (httpUrl === url) throw error
+    console.warn(`${debugLabel}: HTTPS 失败，改用 HTTP 重试 —`, error instanceof Error ? error.message : String(error))
+    return await send(httpUrl)
+  }
+}
+
 // —— m.qqtlr.com ——
 async function requestQqtlrNonce(normalized: string): Promise<string> {
   const signature = createCompatProviderSignature(normalized)
   const url = `${COMPAT_NONCE_HOST}${COMPAT_NONCE_PATH}` +
     `?phone=${encodeURIComponent(normalized)}` +
     `&k=${encodeURIComponent(signature)}&x=0`
-  const response = await fetch(url, {
-    method: "GET",
-    headers: {
-      xua: BMW_CLIENT.userAgent,
-      fkthiefcopy: "Plagiarism/Copying/Server Runaway Interface Deadly Family",
-      author: "MeiDaiSan",
-    },
-    timeout: 12,
-    handleRedirect: async request => request.url.startsWith(COMPAT_NONCE_HOST) ? request : null,
-    debugLabel: "BMW nonce qqtlr",
-  })
-  return parseNonceResponse(response)
+  return parseNonceResponse(await fetchNonceResponse(url, {
+    xua: BMW_CLIENT.userAgent,
+    fkthiefcopy: "Plagiarism/Copying/Server Runaway Interface Deadly Family",
+    author: "MeiDaiSan",
+  }, "BMW nonce qqtlr"))
 }
 
 // —— 备用通道 ——
 // GET <path>?phone=<手机号>，请求头带 _xua / _nonce（客户端随机）/ User-Agent。
 async function requestBackupNonce(normalized: string): Promise<string> {
   const url = `${BACKUP_NONCE_HOST}${BACKUP_NONCE_PATH}?phone=${encodeURIComponent(normalized)}`
-  const response = await fetch(url, {
-    method: "GET",
-    headers: {
-      _xua: BACKUP_NONCE_XUA,
-      _nonce: randomBase64(16),
-      "User-Agent": BMW_CLIENT.dartUserAgent,
-      _av: "2.0.5",
-      _sv: "17.6",
-      _chl: "appstore",
-      Accept: "*/*",
-    },
-    timeout: 12,
-    handleRedirect: async request => request.url.startsWith(BACKUP_NONCE_HOST) ? request : null,
-    debugLabel: "BMW nonce backup",
-  })
-  return parseNonceResponse(response)
+  return parseNonceResponse(await fetchNonceResponse(url, {
+    _xua: BACKUP_NONCE_XUA,
+    _nonce: randomBase64(16),
+    "User-Agent": BMW_CLIENT.dartUserAgent,
+    _av: "2.0.5",
+    _sv: "17.6",
+    _chl: "appstore",
+    Accept: "*/*",
+  }, "BMW nonce backup"))
 }
 
 // —— 自定义地址（自建服务 / 测试）——
@@ -152,14 +164,7 @@ async function requestCustomNonce(normalized: string): Promise<string> {
   if (!base) throw new Error("NONCE_CUSTOM_URL_MISSING")
   const separator = base.includes("?") ? "&" : "?"
   const url = `${base}${separator}phone=${encodeURIComponent(normalized)}`
-  const response = await fetch(url, {
-    method: "GET",
-    headers: { Accept: "*/*" },
-    timeout: 12,
-    handleRedirect: async request => request.url.startsWith(base) ? request : null,
-    debugLabel: "BMW nonce custom",
-  })
-  return parseNonceResponse(response)
+  return parseNonceResponse(await fetchNonceResponse(url, { Accept: "*/*" }, "BMW nonce custom"))
 }
 
 // —— 响应解析：兼容 {code:0, data:"<nonce>"} 与直接返回 nonce 文本 ——

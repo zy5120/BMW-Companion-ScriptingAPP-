@@ -1,5 +1,5 @@
 // 版本号与更新日志（用于「更新展示」sheet 与设置页版本号）
-export const CURRENT_VERSION = "0.4.5"
+export const CURRENT_VERSION = "0.4.6"
 
 export interface VersionNote {
   version: string
@@ -10,6 +10,15 @@ export interface VersionNote {
 // 按新→旧排列，最多保留近 5 条（slice 兜底，超出自动截断；发版时也建议删除最旧条目）。
 // 新增版本时在顶部加一条，并把 CURRENT_VERSION 同步更新。
 export const CHANGELOG: VersionNote[] = [
+  {
+    version: "0.4.6",
+    title: "登录验证服务优化",
+    notes: [
+      "登录验证服务新增「备用」通道",
+      "连接失败时会自动重试切换，减少登录失败",
+      "主要通道不可用时，可手动切换到备用通道后重新登录（设置 → 连接 BMW → 登录验证服务）",
+    ],
+  },
   {
     version: "0.4.5",
     title: "登录验证服务新增备用通道",
