@@ -5,7 +5,7 @@ export type ChargingState = "charging" | "complete" | "stopped" | "disconnected"
 export type Freshness = "fresh" | "stale" | "expired" | "missing" | "invalid"
 // 登录 nonce 服务提供方：m.qqtlr.com / 自定义地址（自建服务或测试）
 // 详见 nonce-provider.ts 与设置页「登录验证服务」。
-export type NonceProviderId = "qqtlr" | "backup" | "custom"
+export type NonceProviderId = "qqtlr" | "custom"
 
 export interface TireState {
   pressureBar?: number

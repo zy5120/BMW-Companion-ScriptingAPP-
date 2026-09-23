@@ -9,13 +9,6 @@ export const BMW_HOST = "https://myprofile.bmw.com.cn"
 export const COMPAT_NONCE_HOST = "https://m.qqtlr.com"
 export const COMPAT_NONCE_PATH = "/bmwNonceV5.php"
 
-// 备用 nonce 服务：
-// GET <path>?phone=<手机号>，请求头带 _xua / _nonce（客户端随机）/ User-Agent。
-// 仅作主要服务不可用时的备用选择，需用户在连接页手动切换。
-export const BACKUP_NONCE_HOST = "https://www.widgetc.cn"
-export const BACKUP_NONCE_PATH = "/bmw/api/encryptV5"
-export const BACKUP_NONCE_XUA = "android(29);bmw;5.11.0(48081);cn"
-
 export const BMW_HEADERS: Record<string, string> = {
   "content-type": "application/json; charset=utf-8",
   "accept": "application/json",
