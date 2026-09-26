@@ -64,6 +64,19 @@ const CARD = "secondarySystemBackground"
 // 首页自动刷新冷却：数据在 5 分钟内的不重复自动刷新（手动点刷新不受限制）
 const AUTO_REFRESH_COOLDOWN_MS = 5 * 60_000
 
+// 刷新失败的用户可见说明：登录过期 → 引导重新登录；否则优先显示宝马返回的原因
+function describeRefreshFailure(error: unknown): { text: string; needsLogin: boolean } {
+  const code = error instanceof Error ? error.message : String(error)
+  if (code === "SESSION_EXPIRED" || code === "SESSION_MISSING") {
+    return { text: "登录已过期，请重新登录后再刷新。", needsLogin: true }
+  }
+  const serverMessage = (error as { serverMessage?: unknown } | null)?.serverMessage
+  if (typeof serverMessage === "string" && serverMessage) {
+    return { text: serverMessage, needsLogin: false }
+  }
+  return { text: "刷新失败，请稍后重试。", needsLogin: false }
+}
+
 // 车况展示按所选车辆品牌切换（BMW / MINI）
 function vehicleBrand(snapshot: VehicleSnapshot): string {
   return snapshot.identity.brand?.toLowerCase() === "mini" ? "MINI" : "BMW"
@@ -382,6 +395,7 @@ function StatusDetailsPage({ showClose = false }: { showClose?: boolean }) {
   const dismiss = Navigation.useDismiss()
   const [snapshot, setSnapshot] = useState(() => loadSnapshot())
   const [refreshing, setRefreshing] = useState(false)
+  const [refreshFailure, setRefreshFailure] = useState<{ text: string; needsLogin: boolean } | null>(null)
   const safety = safetySummary(snapshot)
   // 是否有后排数据：左后/右后均非 unknown → 四门车，按四格展示；否则两门车，左前/右前改名左门/右门
   const hasRearDoors = Boolean(snapshot.access.doorStates &&
@@ -390,15 +404,16 @@ function StatusDetailsPage({ showClose = false }: { showClose?: boolean }) {
   const hasRearWindows = Boolean(snapshot.access.windowStates &&
     snapshot.access.windowStates.leftRear !== "unknown" &&
     snapshot.access.windowStates.rightRear !== "unknown")
-  // 下拉刷新：从宝马服务重新拉取该车快照（失败沿用当前数据）
+  // 下拉刷新：从宝马服务重新拉取该车快照（失败沿用当前数据，并把原因告知用户）
   const refreshStatus = async () => {
     if (refreshing) return
     setRefreshing(true)
     try {
       const next = await refreshConnectedSnapshot()
       setSnapshot(next)
-    } catch {
-      // 失败沿用旧数据
+      setRefreshFailure(null)
+    } catch (error) {
+      setRefreshFailure(describeRefreshFailure(error))
     } finally {
       setRefreshing(false)
     }
@@ -421,6 +436,19 @@ function StatusDetailsPage({ showClose = false }: { showClose?: boolean }) {
         ],
       } : undefined}
     >
+      {refreshFailure ? (
+        <Section>
+          <HStack spacing={10}>
+            <Image systemName="exclamationmark.triangle.fill" foregroundStyle="#FF9F0A" />
+            <VStack alignment="leading" spacing={2} frame={{ maxWidth: Infinity, alignment: "leading" }}>
+              <Text font="subheadline">{refreshFailure.text}</Text>
+              {refreshFailure.needsLogin ? (
+                <Text font="caption" foregroundStyle="secondaryLabel">请在「设置 → 连接 BMW」重新登录</Text>
+              ) : null}
+            </VStack>
+          </HStack>
+        </Section>
+      ) : null}
       <Section
         header={<Text font="headline">安全状态</Text>}
       >
@@ -926,10 +954,12 @@ function DashboardPage() {
   const [snapshot, setSnapshot] = useState(() => loadSnapshot())
   const [refreshing, setRefreshing] = useState(false)
   const [refreshResult, setRefreshResult] = useState<"success" | "failure" | null>(null)
+  const [refreshFailure, setRefreshFailure] = useState<{ text: string; needsLogin: boolean } | null>(null)
   const freshness = getFreshness(snapshot)
   const safety = safetySummary(snapshot)
   const brand = vehicleBrand(snapshot)
   const detailsDestination = useMemo(() => <StatusDetailsPage />, [])
+  const connectionDestination = useMemo(() => <ConnectionPage />, [])
   const tireDestination = useMemo(() => <TireDetailsPage />, [])
   const previewDestination = useMemo(() => <WidgetPreviewPage />, [])
   const settingsDestination = useMemo(() => <SettingsPage />, [])
@@ -955,9 +985,11 @@ function DashboardPage() {
       const next = await refreshConnectedSnapshot()
       setSnapshot(next)
       setRefreshResult("success")
+      setRefreshFailure(null)
       Widget.reloadAll()
-    } catch {
+    } catch (error) {
       setRefreshResult("failure")
+      setRefreshFailure(describeRefreshFailure(error))
     } finally {
       setRefreshing(false)
     }
@@ -997,6 +1029,25 @@ function DashboardPage() {
     >
       <VStack alignment="leading" spacing={16} padding={{ horizontal: 16, top: 10, bottom: 28 }}>
         <VehicleHeader snapshot={snapshot} refreshing={refreshing} refreshResult={refreshResult} />
+        {refreshFailure ? (
+          <NavigationLink destination={connectionDestination} frame={{ maxWidth: Infinity }}>
+            <HStack
+              spacing={10}
+              padding={14}
+              frame={{ maxWidth: Infinity, alignment: "leading" }}
+              background={CARD}
+              clipShape={{ type: "rect", cornerRadius: 17 }}
+            >
+              <Image systemName="exclamationmark.triangle.fill" foregroundStyle="#FF9F0A" font="title3" />
+              <VStack alignment="leading" spacing={2} frame={{ maxWidth: Infinity, alignment: "leading" }}>
+                <Text font="subheadline" lineLimit={3}>{refreshFailure.text}</Text>
+                {refreshFailure.needsLogin ? (
+                  <Text font="caption" foregroundStyle={ACCENT}>点此前往「连接 BMW」重新登录</Text>
+                ) : null}
+              </VStack>
+            </HStack>
+          </NavigationLink>
+        ) : null}
         <EnergyHero snapshot={snapshot} />
 
         <LazyVGrid

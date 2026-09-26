@@ -42,7 +42,7 @@ function dataFromString(value: string): Data {
   return data
 }
 
-function normalizedMobile(value: string): string {
+export function normalizedMobile(value: string): string {
   const digits = value.replace(/\D/g, "")
   const mobile = digits.startsWith("86") ? digits : digits.length === 11 ? `86${digits}` : digits
   if (!/^86\d{11}$/.test(mobile)) throw new Error("MOBILE_INVALID")
@@ -69,7 +69,16 @@ export async function requestJSON<T>(
   } catch {
     throw new Error(`BMW_NON_JSON_${response.status}`)
   }
-  if (!response.ok) throw new Error(`BMW_HTTP_${response.status}`)
+  if (!response.ok) {
+    // 宝马会用 description 给出可读原因（如「账户已被锁定」），透出来供界面展示
+    const description = (value as { description?: unknown } | null)?.description
+    const error = new Error(`BMW_HTTP_${response.status}`) as Error & { serverMessage?: string }
+    if (typeof description === "string" && description.trim()) {
+      error.serverMessage = description.trim().slice(0, 200)
+      console.warn(`BMW HTTP ${response.status} @ ${path}:`, error.serverMessage)
+    }
+    throw error
+  }
   return value as T
 }
 
@@ -389,6 +398,15 @@ export async function loginWithSms(challenge: SmsChallenge, code: string): Promi
 
 export async function renewSession(session: BMWSessionSecrets): Promise<BMWSessionSecrets> {
   return renewGrant({ refreshToken: session.refreshToken, gcid: session.gcid })
+}
+
+// 判断错误是否属于「登录凭证失效」（token / refresh_token 被宝马拒绝）。
+// 用于：非密码登录 → 提示「登录已过期」；密码登录 → 自动重新登录。
+export function isSessionExpiredError(error: unknown): boolean {
+  const message = error instanceof Error ? error.message : String(error)
+  if (message === "SESSION_EXPIRED" || message === "SESSION_MISSING") return true
+  if (message === "REFRESH_TOKEN_CONTRACT_INVALID" || message === "LOGIN_TOKEN_CONTRACT_INVALID") return true
+  return /^BMW_HTTP_(400|401|403|422)$/.test(message)
 }
 
 function knownState(value: unknown): KnownState {

@@ -21,6 +21,7 @@ import {
   fetchVehicleList,
   loginWithPassword,
   loginWithSms,
+  normalizedMobile,
   requestSmsCode,
   type SmsChallenge,
   type VehicleListItem,
@@ -31,7 +32,14 @@ import {
   loadNonceConsent,
 } from "./nonce-provider"
 import type { NonceProviderId } from "./domain"
-import { loadSession, removeSession, saveSession } from "./session-vault"
+import {
+  loadSession,
+  removeCredentials,
+  removeSession,
+  saveCredentials,
+  saveSession,
+  type LoginMethod,
+} from "./session-vault"
 import { refreshMapSnapshot } from "./map-snapshot"
 import { loadSettings, loadSnapshot, saveConnectedSnapshot, saveSettings, setRuntimeMode } from "./storage"
 
@@ -62,6 +70,9 @@ function todayDateString(): string {
 
 function errorMessage(error: unknown): string {
   const code = error instanceof Error ? error.message : String(error)
+  // 宝马返回的可读说明优先展示（如「您的账户已被锁定，请通过忘记密码功能重置密码」）
+  const serverMessage = (error as { serverMessage?: unknown } | null)?.serverMessage
+  if (typeof serverMessage === "string" && serverMessage) return serverMessage
   const known: Record<string, string> = {
     NONCE_CONSENT_REQUIRED: "请先阅读并同意服务说明。",
     MOBILE_INVALID: "请输入正确的中国大陆手机号（86 + 11 位，或 11 位手机号）。",
@@ -229,10 +240,16 @@ export function ConnectionPage() {
     return false
   }
 
-  const finishLogin = async (session: Awaited<ReturnType<typeof loginWithPassword>>) => {
+  const finishLogin = async (
+    session: Awaited<ReturnType<typeof loginWithPassword>>,
+    method: LoginMethod,
+    passwordValue?: string,
+  ) => {
     // Verify read-only vehicle access before committing the new session.
     const snapshot = await fetchFirstVehicleSnapshot(session)
     saveSession(session)
+    // 记录登录方式（密码登录时把密码存到本机 Keychain），供登录过期时自动重新登录
+    saveCredentials(normalizedMobile(phone), method, passwordValue)
     saveConnectedSnapshot(snapshot)
     setRuntimeMode("connected")
     Widget.reloadAll()
@@ -251,7 +268,7 @@ export function ConnectionPage() {
     setStatus("正在进行密码登录…")
     try {
       const session = await loginWithPassword(phone, password)
-      await finishLogin(session)
+      await finishLogin(session, "password", password)
     } catch (error) {
       setStatus(errorMessage(error))
     } finally {
@@ -282,7 +299,7 @@ export function ConnectionPage() {
     setStatus("正在使用短信验证码登录…")
     try {
       const session = await loginWithSms(challenge, smsCode)
-      await finishLogin(session)
+      await finishLogin(session, "sms")
       setSmsCode("")
       setChallenge(null)
     } catch (error) {
@@ -300,13 +317,6 @@ export function ConnectionPage() {
     saveSettings({ ...loadSettings(), groupBannerDismissedDate: todayDateString() })
   }
 
-  // 作者一次性公告：关闭后永久不再显示（仅一次）
-  const [authorNoticeHidden, setAuthorNoticeHidden] = useState(() => loadSettings().authorNoticeDismissed === true)
-  const dismissAuthorNotice = () => {
-    setAuthorNoticeHidden(true)
-    saveSettings({ ...loadSettings(), authorNoticeDismissed: true })
-  }
-
   const signOut = async () => {
     const accepted = await Dialog.confirm({
       title: "退出 BMW 会话？",
@@ -317,6 +327,8 @@ export function ConnectionPage() {
     if (!accepted) return
     try {
       removeSession()
+      // 一并清除保存的账号密码（避免登出后仍能自动重登）
+      removeCredentials()
       setRuntimeMode("demo")
       Widget.reloadAll()
       setStatus("已退出，当前使用演示模式")
@@ -335,27 +347,6 @@ export function ConnectionPage() {
         ],
       }}
     >
-      {!authorNoticeHidden ? (
-        <Section header={<Text font="headline">作者公告</Text>}>
-          <HStack spacing={10}>
-            <Image systemName="exclamationmark.triangle.fill" font="title3" foregroundStyle="#FF9F0A" />
-            <VStack alignment="leading" spacing={2} frame={{ maxWidth: Infinity, alignment: "leading" }}>
-              <Text font="subheadline" fontWeight="semibold">脚本作者 QQ 暂时失联</Text>
-              <Text font="caption" foregroundStyle="secondaryLabel">
-                脚本作者因 QQ 使用外挂被平台封号 15 天（9 月 6 日解锁），请稍等几天。
-              </Text>
-            </VStack>
-            <Button
-              title=""
-              systemImage="xmark.circle.fill"
-              action={dismissAuthorNotice}
-              foregroundStyle="secondaryLabel"
-              accessibilityLabel="关闭作者公告"
-            />
-          </HStack>
-        </Section>
-      ) : null}
-
       {!groupBannerHidden ? (
         <Section header={<Text font="headline">加群交流</Text>}>
           <HStack spacing={10}>
@@ -379,7 +370,7 @@ export function ConnectionPage() {
 
       <Section
         header={<Text font="headline">连接状态</Text>}
-        footer={<Text font="caption">密码和短信验证码不会保存；登录凭证只安全保存在本机。</Text>}
+        footer={<Text font="caption">短信验证码不会保存。选择密码登录时，密码会保存在本机Keychain（不同步 iCloud、不随备份迁移），仅用于登录过期时自动重新登录；退出登录会一并清除。</Text>}
       >
         <HStack spacing={10}>
           {busy ? <ProgressView /> : <Image systemName={loadSession() ? "checkmark.shield.fill" : "car.badge.key.fill"} foregroundStyle={ACCENT} />}

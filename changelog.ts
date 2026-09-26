@@ -1,5 +1,5 @@
 // 版本号与更新日志（用于「更新展示」sheet 与设置页版本号）
-export const CURRENT_VERSION = "0.4.7"
+export const CURRENT_VERSION = "0.4.8"
 
 export interface VersionNote {
   version: string
@@ -10,6 +10,16 @@ export interface VersionNote {
 // 按新→旧排列，最多保留近 5 条（slice 兜底，超出自动截断；发版时也建议删除最旧条目）。
 // 新增版本时在顶部加一条，并把 CURRENT_VERSION 同步更新。
 export const CHANGELOG: VersionNote[] = [
+  {
+    version: "0.4.8",
+    title: "登录过期与错误提示优化",
+    notes: [
+      "登录失败时直接显示宝马返回的原因（如账号被锁定）",
+      "密码登录在登录过期后会自动重新登录，无需手动操作",
+      "验证码登录过期时明确提示重新登录",
+      "密码仅保存在本机（不同步 iCloud），退出登录即清除",
+    ],
+  },
   {
     version: "0.4.7",
     title: "登录验证服务稳定性优化",
